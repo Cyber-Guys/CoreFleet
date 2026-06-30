@@ -31,14 +31,22 @@ class VehicleAgent:
         router: str,
         hz: float = P.CLOUD_HZ,
         window_s: float = P.WINDOW_S,
+        trip_s: float | None = None,
     ) -> None:
         self.sim = sim
         self.vid = sim.vid
+        self.did = sim.did
+        self.trip_id = sim.trip_id
         self.client = VehicleClient(sim.vid, router)
         self.dt = 1.0 / hz
         self.window_s = window_s
+        # length of this driving session; when it elapses the vehicle ends the
+        # trip (publishes its session -> report) and the fleet respawns one.
+        self.trip_s = trip_s
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
+        # set once the vehicle has fully shut down (trip ended or stopped)
+        self.done = threading.Event()
 
     def start(self) -> None:
         self._thread = threading.Thread(
@@ -76,11 +84,17 @@ class VehicleAgent:
                     self.sim.reset_window()
                     last_flush = t
 
+                # end the trip once its duration has elapsed
+                if self.trip_s is not None and t >= self.trip_s:
+                    log.info("vehicle %s ended trip after %.0fs", self.vid, t)
+                    break
+
                 # hold ~1 Hz wall-clock so sim seconds track real seconds
                 elapsed = time.monotonic() - tick_start
                 self._stop.wait(max(0.0, self.dt - elapsed))
         finally:
             self._shutdown(t, last_flush)
+            self.done.set()
 
     def _shutdown(self, t: float, last_flush: float) -> None:
         try:

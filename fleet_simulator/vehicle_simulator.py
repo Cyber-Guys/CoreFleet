@@ -15,8 +15,19 @@ from .config import (
 
 
 class VehicleSimulator:
-    def __init__(self, vid: str, init_pos: tuple[float, float], profile: DriverProfile):
-        self.vid = vid
+    def __init__(
+        self,
+        vid: str,
+        init_pos: tuple[float, float],
+        profile: DriverProfile,
+        did: str = "",
+        driver_name: str = "",
+        trip_id: str = "",
+    ):
+        self.vid = vid          # car / licence plate
+        self.did = did          # driver taking this trip
+        self.driver_name = driver_name
+        self.trip_id = trip_id  # unique id for this trip
         self.p = profile
         self.st = VehicleState(lat=init_pos[0], lon=init_pos[1])
         # two aggregation scopes: a rolling window flushed in EDGE mode, and a
@@ -125,6 +136,8 @@ class VehicleSimulator:
         st = self.st
         return {
             "vid": self.vid,
+            "did": self.did,
+            "trip_id": self.trip_id,
             "t": round(t, 1),
             "speed_kmh": round(st.speed_ms * 3.6, 1),     # PID 0x0D
             "rpm": round(st.rpm),                         # PID 0x0C
@@ -137,12 +150,19 @@ class VehicleSimulator:
             "limit_kmh": self.limit_kmh,                  # limite strada corrente (augmented)
         }
 
+    def _tag(self, d: dict) -> dict:
+        """Attach the driver/trip identity carried by this trip."""
+        d["did"] = self.did
+        d["driver_name"] = self.driver_name
+        d["trip_id"] = self.trip_id
+        return d
+
     def window_summary(self) -> dict:
         """Aggregate of the current EDGE window (last WINDOW_S seconds)."""
         s = self.window_agg.summary_dict(self.vid)
         s["lat"] = round(self.st.lat, 6)
         s["lon"] = round(self.st.lon, 6)
-        return s
+        return self._tag(s)
 
     def reset_window(self) -> None:
         """Start a fresh EDGE window after a summary has been transmitted."""
@@ -150,5 +170,5 @@ class VehicleSimulator:
 
     def session_summary(self) -> dict:
         """Full-session aggregate, used to build the end-of-session report."""
-        return self.session_agg.summary_dict(self.vid)
+        return self._tag(self.session_agg.summary_dict(self.vid))
 

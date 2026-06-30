@@ -2,3 +2,7 @@
 __pycache__/
 *.py[cod]
 scratch/
+.env
+
+# java build output
+report-service/target/

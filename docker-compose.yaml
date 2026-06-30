@@ -17,12 +17,15 @@ services:
       dockerfile: zenoh_router/subscriber/Dockerfile
     environment:
       ZENOH_ROUTER: tcp/zenoh-router:7447
-      BW_LIMIT_BYTES_S: "4000"   # projected CLOUD B/s that triggers EDGE
+      BW_LIMIT_BYTES_S: "1800"   # projected CLOUD B/s that triggers EDGE
       BW_HYSTERESIS: "0.6"       # return to CLOUD below 60% of the limit
       STATS_INTERVAL_S: "5"
       LOG_LEVEL: INFO
+      # hand off each finished session to the Jakarta report service
+      REPORT_URL: http://fleet-report:8080/report/api/report
     depends_on:
       - zenoh-router
+      - fleet-report
     networks:
       - corefleet
 
@@ -34,12 +37,26 @@ services:
       ZENOH_ROUTER: tcp/zenoh-router:7447
       START_VEHICLES: "3"
       MAX_VEHICLES: "15"
-      SPAWN_INTERVAL_S: "8"      # add a vehicle every 8s -> ramps into congestion
-      DURATION_S: "300"
+      SPAWN_INTERVAL_S: "2"      # ramp up / refill cadence
+      TRIP_MIN_S: "25"           # each vehicle drives a finite trip, then ends
+      TRIP_MAX_S: "70"           #   its session -> a report streams to Jakarta
+      DURATION_S: "300"          # overall simulation length
       LOG_LEVEL: INFO
     depends_on:
       - zenoh-router
       - fleet-server
+    networks:
+      - corefleet
+
+  fleet-report:
+    build:
+      context: ./report-service
+      dockerfile: Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}          # from gitignored .env
+      OPENAI_MODEL_NAME: ${OPENAI_MODEL_NAME:-gpt-4o-mini}
+    ports:
+      - "9080:8080"       # Jakarta EE report service (Open Liberty)
     networks:
       - corefleet
 
@@ -51,6 +68,7 @@ services:
       - "8080:80"         # dashboard UI at http://localhost:8080
     depends_on:
       - zenoh-router
+      - fleet-report
     networks:
       - corefleet
 

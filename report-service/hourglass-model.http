@@ -1,0 +1,38 @@
+### Status (health + which model is configured)
+GET http://localhost:9080/report/api/status
+Accept: application/json
+###
+
+### Generic Hourglass mapping (the template's challenge endpoint)
+POST http://localhost:9080/report/api/hourglass/analyze
+Content-Type: application/json
+Accept: application/json
+
+{
+  "domain": "connected car-sharing fleet",
+  "useCase": "Analyse driving sessions to score safety and eco efficiency"
+}
+###
+
+### Driving report from a session summary (CoreFleet pipeline)
+POST http://localhost:9080/report/api/report
+Content-Type: application/json
+Accept: application/json
+
+{
+  "vid": "AB123CD",
+  "ended_at": 1782846925.25,
+  "session": {
+    "vid": "AB123CD", "dist_km": 0.333, "dur_min": 0.27, "avg_kmh": 75.0,
+    "max_kmh": 108.6, "avg_rpm": 2592, "fuel_l": 0.022, "l_per_100km": 6.6,
+    "harsh_accel": 2, "harsh_brake": 0, "overrev_s": 0.0, "cold_overrev_s": 0.0,
+    "idle_s": 0.0, "speeding_s": 0.0
+  },
+  "scores": { "safety": 11.1, "eco": 73.6 }
+}
+###
+
+### Recent reports (what the dashboard can poll)
+GET http://localhost:9080/report/api/report
+Accept: application/json
+###

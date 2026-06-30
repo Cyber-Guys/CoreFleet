@@ -11,6 +11,7 @@
 import { buildSnapshot } from '@/data/mockData'
 
 const BASE = import.meta.env.VITE_FLEET_API_URL || 'http://localhost:8000'
+const REPORT_BASE = import.meta.env.VITE_REPORT_API_URL || 'http://localhost:9080'
 const USE_MOCK = (import.meta.env.VITE_USE_MOCK ?? 'true') !== 'false'
 
 function delay(ms) {
@@ -36,5 +37,18 @@ export const fleetApi = {
     })
     if (!res.ok) throw new Error(`Fleet API ${res.status}`)
     return adaptZenoh(await res.json())
+  },
+
+  /**
+   * Live LLM driving reports from the Jakarta service (newest first).
+   * Throws on any non-2xx / network error so the caller can fall back to mock.
+   */
+  async getReports({ signal } = {}) {
+    const res = await fetch(`${REPORT_BASE}/report/api/report`, {
+      headers: { Accept: 'application/json' },
+      signal,
+    })
+    if (!res.ok) throw new Error(`Report API ${res.status}`)
+    return res.json() // DrivingReport[]
   },
 }

@@ -72,8 +72,9 @@ flowchart LR
 | **Fleet simulator** | `fleet_simulator/` | Physically-grounded OBD2/GPS telemetry generator; each vehicle is an independent agent streaming over Zenoh. | ✅ |
 | **Zenoh router** | `zenoh_router/` | Dockerized Eclipse Zenoh router (wire `:7447`, REST `:8000`). | ✅ |
 | **Fleet server** | `zenoh_router/subscriber/fleet_server.py` | Subscribes to telemetry, detects congestion, publishes mode decisions, finalizes sessions and reports bandwidth/energy. | ✅ |
-| **Web app** | _planned_ | Live map of the fleet (Leaflet / MapLibre) fed from Zenoh. | ⏳ |
-| **Jakarta EE LLM service** | _planned_ | Consumes a session summary and generates a Hourglass-Model driving report. | ⏳ |
+| **Dashboard** | `webapp/` | Vue 3 control-room UI: active vehicles, CLOUD/EDGE status, Cloud-vs-Edge chart, searchable registry. | ✅ |
+| **Jakarta EE LLM service** | `report-service/` | Open Liberty + langchain4j; turns a session summary into a Hourglass-Model driving report. | ✅ |
+| **Live map** | _planned_ | Fleet positions (Leaflet / MapLibre) fed from `lat`/`lon`. | ⏳ |
 
 ---
 
@@ -153,6 +154,17 @@ When a session ends, the server hands the session summary to a **Jakarta EE** se
 
 Keeping the scores deterministic and letting the LLM only write the prose makes the output reproducible and easy to defend in the demo.
 
+This is implemented in **`report-service/`** — a Jakarta EE 11 app on Open Liberty,
+built from the Eclipse [`hourglass-template`](https://gitlab.eclipse.org/eclipse-research-labs/o-cei-project/challenge-3-jakarta-ee-hourglass/hourglass-template)
+and using **langchain4j** for the OpenAI call:
+
+- `POST /report/api/hourglass/analyze` — the template's generic Hourglass mapping (`{domain, useCase}`).
+- `POST /report/api/report` — a session summary → a structured `DrivingReport` (eco/safety scores, narrative, maintenance hints, **and** a Hourglass mapping for the connected-fleet domain).
+- The fleet server posts every finished session here automatically (`REPORT_URL`).
+
+The OpenAI key is read from the **`OPENAI_API_KEY`** environment variable (via a
+gitignored `.env`); it is never committed. See `report-service/README.md`.
+
 ---
 
 ## 8. Repository Structure
@@ -178,7 +190,12 @@ Keeping the scores deterministic and letting the LLM only write the prose makes 
 │   └── subscriber/
 │       ├── fleet_server.py     # Fleet server (subscriber + controller)
 │       └── Dockerfile
-├── docker-compose.yaml         # Full stack: router + server + simulator
+├── report-service/             # Jakarta EE 11 + langchain4j (Challenge 3)
+│   ├── src/main/java/dukes/    # hourglass/ + report/ + ai/ (LLM wiring)
+│   └── Dockerfile              # Maven build -> Open Liberty
+├── webapp/                     # Vue 3 dashboard (Challenge — operations UI)
+├── docker-compose.yaml         # Full stack: router + server + sim + report + webapp
+├── .env.example                # OPENAI_API_KEY lives in a gitignored .env
 ├── requirements.txt
 └── README.md
 ```
@@ -193,17 +210,23 @@ Keeping the scores deterministic and letting the LLM only write the prose makes 
 
 ### Full stack (recommended)
 
-Brings up the router, the fleet server and the simulator together:
+Provide your OpenAI key for the report service (kept out of git):
 
 ```bash
+cp .env.example .env        # then edit .env and set OPENAI_API_KEY
 docker compose up --build
 ```
 
-The simulator starts with a few vehicles and adds one every `SPAWN_INTERVAL_S`
-seconds, ramping the fleet into congestion. Watch the `fleet-server` logs for the
-`MODE -> EDGE` / `MODE -> CLOUD` switches, the bandwidth/energy `[stats]` lines,
-and the `SESSION REPORT` payloads emitted when vehicles shut down. The router's
-REST API is exposed on `:8000` for the web app or `curl`.
+This brings up the router, fleet server, simulator, **report service** and
+**dashboard**. The simulator starts with a few vehicles and adds one every
+`SPAWN_INTERVAL_S` seconds, ramping the fleet into congestion. Watch the
+`fleet-server` logs for the `MODE -> EDGE` / `MODE -> CLOUD` switches, the
+bandwidth/energy `[stats]` lines, and `SESSION REPORT` payloads on shutdown — each
+is also POSTed to the report service, which returns an LLM driving report.
+
+- Dashboard: **http://localhost:8080**
+- Report service: **http://localhost:9080/report/api/status**
+- Router REST: **http://localhost:8000** (`core/fleet/**`)
 
 Tunables live in `docker-compose.yaml`: `START_VEHICLES`, `MAX_VEHICLES`,
 `SPAWN_INTERVAL_S`, `DURATION_S` (simulator) and `BW_LIMIT_BYTES_S`,
@@ -231,10 +254,11 @@ ZENOH_ROUTER=tcp/localhost:7447 python -m fleet_simulator
 
 - [x] **Wire the simulator to Zenoh** — liveliness token on start, subscribe + query `mode`, publish `raw` (CLOUD) or 15 s `summary` (EDGE), final `session` aggregate + undeclare on stop.
 - [x] **Fleet server / controller** — wildcard subscriptions, congestion estimate with hysteresis, mode queryable, session finalization, bandwidth/energy stats.
-- [x] **Full Docker stack** — router + server + simulator on Python 3.13.
-- [ ] **Bandwidth & energy dashboard** — surface the server's CLOUD vs EDGE bytes/s and joules-saved stats in a UI (the Challenge 1 result slide).
-- [ ] **Web app** — live fleet map fed from the Zenoh REST/WS endpoint.
-- [ ] **Jakarta EE LLM service** — consume the `SESSION REPORT` payload and generate the Hourglass-Model driving report.
+- [x] **Full Docker stack** — router + server + simulator + report service + dashboard.
+- [x] **Vue 3 dashboard** — active vehicles, CLOUD/EDGE status, Cloud-vs-Edge chart, searchable registry.
+- [x] **Jakarta EE LLM service** — consume the session payload and generate the Hourglass-Model driving report (langchain4j + OpenAI).
+- [ ] **Live map** — fleet positions from `lat`/`lon` (Leaflet/MapLibre); data already in the dashboard store.
+- [ ] **Dashboard ⇄ reports** — have the Reports view poll `GET /report/api/report` for live LLM reports.
 - [ ] **Compact encoding** — CBOR/protobuf variant to measure the real bandwidth win.
 
 ---

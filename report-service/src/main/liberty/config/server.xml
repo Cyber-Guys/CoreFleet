@@ -1,0 +1,15 @@
+<server description="CoreFleet Hourglass Report Service">
+    <featureManager>
+        <platform>jakartaee-11.0</platform>
+        <feature>restfulWS</feature>
+        <feature>jsonb</feature>
+        <feature>jsonp</feature>
+        <feature>cdi</feature>
+        <feature>mpConfig-3.1</feature>
+        <feature>expressionLanguage</feature>
+    </featureManager>
+
+    <httpEndpoint id="defaultHttpEndpoint" host="*" httpPort="8080"/>
+
+    <webApplication location="corefleet-report.war" contextRoot="/report"/>
+</server>

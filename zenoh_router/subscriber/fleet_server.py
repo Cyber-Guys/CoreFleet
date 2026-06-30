@@ -21,6 +21,8 @@ import os
 import signal
 import threading
 import time
+import urllib.error
+import urllib.request
 
 import zenoh
 
@@ -37,6 +39,24 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _bad_behaviours(summary: dict) -> list[str]:
+    """Names of the unsafe/wasteful behaviours present in a trip aggregate."""
+    flags = []
+    if summary.get("harsh_accel", 0) > 0:
+        flags.append("harsh_accel")
+    if summary.get("harsh_brake", 0) > 0:
+        flags.append("harsh_brake")
+    if summary.get("speeding_s", 0) > 0:
+        flags.append("speeding")
+    if summary.get("overrev_s", 0) > 0:
+        flags.append("overrev")
+    if summary.get("cold_overrev_s", 0) > 0:
+        flags.append("cold_overrev")
+    if summary.get("idle_s", 0) > 30:
+        flags.append("excess_idle")
+    return flags
+
+
 class FleetServer:
     def __init__(self, router: str) -> None:
         self.router = router
@@ -46,11 +66,16 @@ class FleetServer:
         self.bw_low = self.bw_high * _env_float("BW_HYSTERESIS", 0.6)
         self.joules_per_mb = _env_float("JOULES_PER_MB", 1100.0)
         self.stats_interval_s = _env_float("STATS_INTERVAL_S", 5.0)
+        # Jakarta EE / LLM report service. Empty -> hand-off disabled (log only).
+        self.report_url = os.getenv("REPORT_URL", "").strip()
 
         self._lock = threading.Lock()
         self._active: set[str] = set()
         self._last_pos: dict[str, tuple[float, float]] = {}
         self._mode = P.Mode.CLOUD
+
+        # per-driver trip history, to score behaviour across trips
+        self._drivers: dict[str, list[dict]] = {}
 
         # rolling traffic counters (since last stats tick)
         self._raw_msgs = 0
@@ -128,15 +153,81 @@ class FleetServer:
 
     # --- session report (LLM / Jakarta hand-off) ---
     def _finalize_session(self, summary: dict) -> None:
+        scores = self._score(summary)
+        did = summary.get("did") or "UNKNOWN"
+        with self._lock:
+            history = self._drivers.setdefault(did, [])
+            trend = self._trend(history, scores, summary)
+            history.append({
+                "trip_id": summary.get("trip_id"),
+                "vid": summary.get("vid"),
+                "safety": scores["safety"],
+                "eco": scores["eco"],
+                "flags": _bad_behaviours(summary),
+            })
+
         report = {
             "vid": summary.get("vid"),
+            "did": did,
+            "driverName": summary.get("driver_name") or did,
+            "tripId": summary.get("trip_id"),
             "ended_at": time.time(),
             "session": summary,
-            "scores": self._score(summary),
+            "scores": scores,
+            "trend": trend,
         }
-        # Hand-off point for the Jakarta EE / LLM report service. For now we emit
-        # the structured payload; a downstream consumer can pick it up.
         log.info("SESSION REPORT %s", json.dumps(report, separators=(",", ":")))
+        # Hand off to the Jakarta EE / LLM service (best-effort, off the Zenoh thread).
+        if self.report_url:
+            threading.Thread(target=self._post_report, args=(report,), daemon=True).start()
+
+    @staticmethod
+    def _trend(history: list[dict], scores: dict, summary: dict) -> dict:
+        """Compare this trip to the driver's past trips: improved / worsened /
+        stable, plus behaviours that recur across trips (recidivist)."""
+        trip_count = len(history) + 1
+        curr = (scores["safety"] + scores["eco"]) / 2.0
+
+        if not history:
+            return {
+                "tripCount": 1, "verdict": "first_trip",
+                "deltaSafety": None, "deltaEco": None,
+                "prevSafety": None, "prevEco": None, "recidivist": [],
+            }
+
+        prev_safety = sum(h["safety"] for h in history) / len(history)
+        prev_eco = sum(h["eco"] for h in history) / len(history)
+        prev = (prev_safety + prev_eco) / 2.0
+        delta = curr - prev
+        verdict = "improved" if delta > 5 else "worsened" if delta < -5 else "stable"
+
+        curr_flags = _bad_behaviours(summary)
+        recidivist = sorted(
+            f for f in curr_flags
+            if any(f in h["flags"] for h in history)
+        )
+        return {
+            "tripCount": trip_count,
+            "verdict": verdict,
+            "deltaSafety": round(scores["safety"] - prev_safety, 1),
+            "deltaEco": round(scores["eco"] - prev_eco, 1),
+            "prevSafety": round(prev_safety, 1),
+            "prevEco": round(prev_eco, 1),
+            "recidivist": recidivist,
+        }
+
+    def _post_report(self, report: dict) -> None:
+        data = json.dumps(report).encode("utf-8")
+        req = urllib.request.Request(
+            self.report_url, data=data,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                log.info("report %s posted -> %s %d",
+                         report.get("vid"), self.report_url, resp.status)
+        except (urllib.error.URLError, OSError) as exc:
+            log.warning("report hand-off failed (%s): %s", self.report_url, exc)
 
     @staticmethod
     def _score(s: dict) -> dict:

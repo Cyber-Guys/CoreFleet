@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Based on the Eclipse o-cei hourglass-template (EPL-2.0).
+    Customised for CoreFleet SDV: completes the Hourglass LLM call and adds a
+    driving-report endpoint that consumes the fleet server's session summary.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>dukes</groupId>
+    <artifactId>corefleet-report</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <name>CoreFleet Hourglass Report Service</name>
+    <packaging>war</packaging>
+
+    <parent>
+        <groupId>org.eclipse.ee4j</groupId>
+        <artifactId>project</artifactId>
+        <version>2.0.4</version>
+        <relativePath/>
+    </parent>
+
+    <licenses>
+        <license>
+            <name>Eclipse Public License - v 2.0</name>
+            <url>https://www.eclipse.org/legal/epl-2.0/</url>
+            <distribution>repo</distribution>
+        </license>
+    </licenses>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- template targets release 26; pinned to 17, the Jakarta EE 11 minimum
+             and the newest Java with an official Open Liberty image -->
+        <maven.compiler.release>17</maven.compiler.release>
+        <langchain4j.version>1.13.0</langchain4j.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>jakarta.platform</groupId>
+            <artifactId>jakarta.jakartaee-web-api</artifactId>
+            <version>11.0.0</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- MicroProfile Config for reading OPENAI_API_KEY / model from env -->
+        <dependency>
+            <groupId>org.eclipse.microprofile.config</groupId>
+            <artifactId>microprofile-config-api</artifactId>
+            <version>3.1</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <!-- langchain4j: OpenAI chat model + AI services (structured output) -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <finalName>corefleet-report</finalName>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.11.0</version>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-war-plugin</artifactId>
+                <version>3.3.2</version>
+            </plugin>
+
+            <!-- optional: `mvn liberty:dev` for local hot-reload.
+                 The Docker image instead deploys the WAR on an official runtime. -->
+            <plugin>
+                <groupId>io.openliberty.tools</groupId>
+                <artifactId>liberty-maven-plugin</artifactId>
+                <version>3.12.0</version>
+                <configuration>
+                    <runtimeArtifact>
+                        <groupId>io.openliberty</groupId>
+                        <artifactId>openliberty-runtime</artifactId>
+                        <!-- needs a release with the jakartaee-11.0 feature -->
+                        <version>25.0.0.12</version>
+                        <type>zip</type>
+                    </runtimeArtifact>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
