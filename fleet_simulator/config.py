@@ -1,5 +1,6 @@
-from .types import DriverProfile
-
+# NOTE: `from .types import DriverProfile` lives at the BOTTOM of this module.
+# The `types` submodules import the constants below, so the constants must be
+# defined before `types` is imported, otherwise the import cycle breaks.
 
 # ---------------------------------------------------------------------------
 # Costanti fisiche / di simulazione
@@ -25,6 +26,11 @@ IDLE_SPEED_MS = 0.6  # sotto = fermo
 # Stima energia di trasmissione: SOLO indicativa, da giustificare nel report.
 # Ordine di grandezza per radio cellulare in trasmissione attiva.
 JOULES_PER_MB = 1100.0
+
+
+# Imported here (not at top) to avoid a circular import: the `types` package
+# reads the constants defined above during its own import.
+from .types import DriverProfile  # noqa: E402
 
 
 # Tipologie di guidatore predefinite, da usare per le simulazioni

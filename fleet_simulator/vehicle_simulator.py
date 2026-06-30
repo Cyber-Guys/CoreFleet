@@ -1,11 +1,11 @@
 """
-Simulatore di telemetria OBD2 di un veicolo — Code the Continuum Hackathon.
+Simulatore di telemetria OBD2 di un veicolo.
 """
 import math
 import random
 
 from .types import DriverProfile, EdgeAggregate, VehicleState
-from config import (
+from .config import (
     IDLE_RPM, IDLE_SPEED_MS, MAX_RPM, COLD_THRESHOLD_C,
     WHEEL_CIRCUMFERENCE_M, FINAL_DRIVE, GEAR_RATIOS,
     TARGET_COOLANT_C, COOLANT_TAU_S, HARSH_ACCEL_MS2,
@@ -15,11 +15,14 @@ from config import (
 
 
 class VehicleSimulator:
-    def __init__(self, vid: str, profile: DriverProfile):
+    def __init__(self, vid: str, init_pos: tuple[float, float], profile: DriverProfile):
         self.vid = vid
         self.p = profile
-        self.st = VehicleState()
-        self.agg = EdgeAggregate()
+        self.st = VehicleState(lat=init_pos[0], lon=init_pos[1])
+        # two aggregation scopes: a rolling window flushed in EDGE mode, and a
+        # full-session accumulator used to build the end-of-session report.
+        self.window_agg = EdgeAggregate()
+        self.session_agg = EdgeAggregate()
         self.limit_kmh = random.choice(SPEED_LIMITS_KMH)
         self.target_ms = self.limit_kmh / 3.6
         self.segment_timer = random.uniform(15, 40)
@@ -103,14 +106,18 @@ class VehicleSimulator:
         st.lon += d * math.sin(st.heading) / (111_111.0 * math.cos(math.radians(st.lat)))
 
         # rilevazione eventi (sul fronte di salita, non a ogni tick)
-        if accel > HARSH_ACCEL_MS2 and not self._was_harsh_accel:
-            self.agg.harsh_accel += 1
+        harsh_accel = accel > HARSH_ACCEL_MS2 and not self._was_harsh_accel
+        harsh_brake = accel < HARSH_BRAKE_MS2 and not self._was_harsh_brake
         self._was_harsh_accel = accel > HARSH_ACCEL_MS2
-        if accel < HARSH_BRAKE_MS2 and not self._was_harsh_brake:
-            self.agg.harsh_brake += 1
         self._was_harsh_brake = accel < HARSH_BRAKE_MS2
 
-        self.agg.add_tick(st, dt, self.limit_kmh)
+        # feed both the rolling window (EDGE transmissions) and the session total
+        for agg in (self.window_agg, self.session_agg):
+            if harsh_accel:
+                agg.harsh_accel += 1
+            if harsh_brake:
+                agg.harsh_brake += 1
+            agg.add_tick(st, dt, self.limit_kmh)
 
 
     def raw_sample(self, t: float) -> dict:
@@ -129,4 +136,19 @@ class VehicleSimulator:
             "lon": round(st.lon, 6),                      # GPS (augmented)
             "limit_kmh": self.limit_kmh,                  # limite strada corrente (augmented)
         }
+
+    def window_summary(self) -> dict:
+        """Aggregate of the current EDGE window (last WINDOW_S seconds)."""
+        s = self.window_agg.summary_dict(self.vid)
+        s["lat"] = round(self.st.lat, 6)
+        s["lon"] = round(self.st.lon, 6)
+        return s
+
+    def reset_window(self) -> None:
+        """Start a fresh EDGE window after a summary has been transmitted."""
+        self.window_agg = EdgeAggregate()
+
+    def session_summary(self) -> dict:
+        """Full-session aggregate, used to build the end-of-session report."""
+        return self.session_agg.summary_dict(self.vid)
 

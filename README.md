@@ -68,9 +68,10 @@ flowchart LR
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| **Fleet simulator** | `fleet_simulator/` | Physically-grounded OBD2/GPS telemetry generator for N vehicles with distinct driver profiles. | ✅ Core physics done · ⏳ Zenoh publishing pending |
+| **Shared library** | `corefleet/` | Zenoh protocol (keys, modes, codec) + `VehicleClient`, imported by both vehicle and server. | ✅ |
+| **Fleet simulator** | `fleet_simulator/` | Physically-grounded OBD2/GPS telemetry generator; each vehicle is an independent agent streaming over Zenoh. | ✅ |
 | **Zenoh router** | `zenoh_router/` | Dockerized Eclipse Zenoh router (wire `:7447`, REST `:8000`). | ✅ |
-| **Fleet server** | `zenoh_router/subscriber/` | Subscribes to telemetry, detects congestion, publishes mode decisions, accumulates per-session state, triggers reports. | ⏳ Subscriber skeleton only |
+| **Fleet server** | `zenoh_router/subscriber/fleet_server.py` | Subscribes to telemetry, detects congestion, publishes mode decisions, finalizes sessions and reports bandwidth/energy. | ✅ |
 | **Web app** | _planned_ | Live map of the fleet (Leaflet / MapLibre) fed from Zenoh. | ⏳ |
 | **Jakarta EE LLM service** | _planned_ | Consumes a session summary and generates a Hourglass-Model driving report. | ⏳ |
 
@@ -83,12 +84,12 @@ flowchart LR
 | Key expression | Direction | Payload | Mode | Notes |
 |---|---|---|---|---|
 | `core/fleet/{vid}/alive` | Vehicle → Server | _liveliness token_ | — | Declared on ignition. Auto-undeclared (DELETE sample) on disconnect → free crash detection. |
-| `core/fleet/{vid}/dead` | Vehicle → Server | `{vid}` | — | Optional explicit clean shutdown. |
 | `core/fleet/{vid}/raw` | Vehicle → Server | JSON telemetry | `CLOUD` | One sample per second. |
 | `core/fleet/{vid}/summary` | Vehicle → Server | JSON aggregate | `EDGE` | One sample per 15-second window. |
+| `core/fleet/{vid}/session` | Vehicle → Server | JSON aggregate | — | Final full-session aggregate, published once on shutdown; triggers the driving report. |
 | `core/fleet/mode` | Server → Vehicles | `"CLOUD"` \| `"EDGE"` | — | Global mode. Exposed as a **queryable** so vehicles joining mid-run can read the current value, then subscribe for changes. |
 
-The server subscribes with wildcards: `core/fleet/*/raw`, `core/fleet/*/summary`, `core/fleet/*/alive`, so it scales to any number of vehicles without per-vehicle subscription bookkeeping.
+The server subscribes with wildcards: `core/fleet/*/raw`, `core/fleet/*/summary`, `core/fleet/*/session`, `core/fleet/*/alive`, so it scales to any number of vehicles without per-vehicle subscription bookkeeping. The end-of-session report is triggered by the `session` payload (an explicit end-of-drive event), so it is independent of liveliness-message ordering.
 
 > **Design notes / improvements over a naïve design**
 > - **Liveliness tokens** instead of a manual `alive`/`dead` message pair: presence is tracked by Zenoh itself, so a device that crashes or loses connectivity is detected automatically.
@@ -103,13 +104,13 @@ The server subscribes with wildcards: `core/fleet/*/raw`, `core/fleet/*/summary`
 The server estimates instantaneous network pressure from the number of active vehicles and their per-vehicle payload rate, and switches the whole fleet's mode with **hysteresis** to avoid flapping:
 
 ```
-estimated_rate = active_vehicles × avg_raw_bytes × cloud_hz
+projected_cloud_bps = active_vehicles × avg_raw_bytes × CLOUD_HZ
 
-if mode == CLOUD and estimated_rate > HIGH_WATERMARK → publish EDGE
-if mode == EDGE  and estimated_rate < LOW_WATERMARK  → publish CLOUD
+if mode == CLOUD and projected_cloud_bps > BW_LIMIT_BYTES_S        → publish EDGE
+if mode == EDGE  and projected_cloud_bps < BW_LIMIT_BYTES_S × 0.6  → publish CLOUD
 ```
 
-Energy saved per window is estimated as `bytes_saved / 1e6 × JOULES_PER_MB`, the headline metric for the Challenge 1 comparison.
+`avg_raw_bytes` is measured live from observed raw payloads; both thresholds are configurable via environment variables (`BW_LIMIT_BYTES_S`, `BW_HYSTERESIS`). Energy saved is estimated as `bytes_saved / 1e6 × JOULES_PER_MB` against an all-CLOUD baseline — the headline metric for the Challenge 1 comparison, printed every `STATS_INTERVAL_S` seconds.
 
 Two aggregation scopes are maintained:
 
@@ -158,17 +159,27 @@ Keeping the scores deterministic and letting the LLM only write the prose makes 
 
 ```
 .
+├── corefleet/                  # Shared library (vehicle + server)
+│   ├── protocol.py             # Key expressions, Mode enum, JSON codec
+│   └── client.py               # VehicleClient: liveliness, mode, publishers
 ├── fleet_simulator/            # Vehicle & fleet telemetry simulator
+│   ├── __main__.py             # Entry point: python -m fleet_simulator
 │   ├── config.py               # Physical constants, driver profiles, thresholds
-│   ├── fleet_simulator.py      # Spawns and steps N vehicles
-│   ├── vehicle_simulator.py    # Per-vehicle physics + raw_sample()
+│   ├── fleet_simulator.py      # Fleet runner: spawns/ramps vehicle agents
+│   ├── agent.py                # VehicleAgent: physics + Zenoh streaming loop
+│   ├── vehicle_simulator.py    # Per-vehicle physics + raw/window/session payloads
+│   ├── Dockerfile
 │   └── types/
 │       ├── driver_profile.py   # aggressive / normal / calm profiles
 │       ├── vehicle_state.py    # Live vehicle state
 │       └── edge_aggregate.py   # Rolling/session aggregation + summary_dict()
 ├── zenoh_router/
-│   ├── docker-compose.yaml     # Zenoh router + subscriber stack
-│   └── subscriber/             # Fleet server (subscriber + controller)
+│   ├── docker-compose.yaml     # Standalone router (router only)
+│   └── subscriber/
+│       ├── fleet_server.py     # Fleet server (subscriber + controller)
+│       └── Dockerfile
+├── docker-compose.yaml         # Full stack: router + server + simulator
+├── requirements.txt
 └── README.md
 ```
 
@@ -177,41 +188,53 @@ Keeping the scores deterministic and letting the LLM only write the prose makes 
 ## 9. Getting Started
 
 ### Prerequisites
-- Python 3.10+
-- Docker + Docker Compose
+- Docker + Docker Compose (images use Python 3.13)
+- Or, for local runs: Python 3.10+ and `pip install -r requirements.txt`
 
-### Run the Zenoh router and subscriber
+### Full stack (recommended)
+
+Brings up the router, the fleet server and the simulator together:
 
 ```bash
-# create the shared network referenced by docker-compose.yaml
-docker network create zenoh-net
-
-cd zenoh_router
 docker compose up --build
 ```
 
-The router exposes the Zenoh wire protocol on `tcp/7447` and a REST API on `8000`.
+The simulator starts with a few vehicles and adds one every `SPAWN_INTERVAL_S`
+seconds, ramping the fleet into congestion. Watch the `fleet-server` logs for the
+`MODE -> EDGE` / `MODE -> CLOUD` switches, the bandwidth/energy `[stats]` lines,
+and the `SESSION REPORT` payloads emitted when vehicles shut down. The router's
+REST API is exposed on `:8000` for the web app or `curl`.
 
-### Run the fleet simulator
+Tunables live in `docker-compose.yaml`: `START_VEHICLES`, `MAX_VEHICLES`,
+`SPAWN_INTERVAL_S`, `DURATION_S` (simulator) and `BW_LIMIT_BYTES_S`,
+`BW_HYSTERESIS`, `STATS_INTERVAL_S` (server).
+
+### Run components locally
 
 ```bash
 python -m venv .venv && source .venv/bin/activate   # fish: source .venv/bin/activate.fish
-pip install eclipse-zenoh
+pip install -r requirements.txt
 
-python -m fleet_simulator.fleet_simulator
+# 1) router only
+docker compose -f zenoh_router/docker-compose.yaml up
+
+# 2) server  (new shell, from repo root)
+ZENOH_ROUTER=tcp/localhost:7447 PYTHONPATH=. python zenoh_router/subscriber/fleet_server.py
+
+# 3) simulator (new shell, from repo root)
+ZENOH_ROUTER=tcp/localhost:7447 python -m fleet_simulator
 ```
-
-> The simulator currently runs the physics loop only; wiring it to publish over Zenoh is the next milestone (see Roadmap).
 
 ---
 
 ## 10. Roadmap
 
-- [ ] **Wire the simulator to Zenoh** — liveliness token on start, subscribe + query `mode`, publish `raw` (CLOUD) or 15 s `summary` (EDGE), undeclare on stop.
-- [ ] **Fleet server / controller** — wildcard subscriptions, congestion estimate with hysteresis, per-session accumulation, report trigger on session end.
-- [ ] **Bandwidth & energy dashboard** — quantify CLOUD vs EDGE bytes/s and joules saved (the Challenge 1 result slide).
+- [x] **Wire the simulator to Zenoh** — liveliness token on start, subscribe + query `mode`, publish `raw` (CLOUD) or 15 s `summary` (EDGE), final `session` aggregate + undeclare on stop.
+- [x] **Fleet server / controller** — wildcard subscriptions, congestion estimate with hysteresis, mode queryable, session finalization, bandwidth/energy stats.
+- [x] **Full Docker stack** — router + server + simulator on Python 3.13.
+- [ ] **Bandwidth & energy dashboard** — surface the server's CLOUD vs EDGE bytes/s and joules-saved stats in a UI (the Challenge 1 result slide).
 - [ ] **Web app** — live fleet map fed from the Zenoh REST/WS endpoint.
-- [ ] **Jakarta EE LLM service** — Hourglass-Model driving report per session.
+- [ ] **Jakarta EE LLM service** — consume the `SESSION REPORT` payload and generate the Hourglass-Model driving report.
 - [ ] **Compact encoding** — CBOR/protobuf variant to measure the real bandwidth win.
 
 ---

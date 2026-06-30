@@ -5,7 +5,7 @@ Aggregatore edge:
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from config import IDLE_SPEED_MS, OVERREV_RPM, COLD_THRESHOLD_C
+from ..config import IDLE_SPEED_MS, OVERREV_RPM, COLD_THRESHOLD_C
 
 if TYPE_CHECKING:
     from .vehicle_state import VehicleState
