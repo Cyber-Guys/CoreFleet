@@ -69,8 +69,8 @@ class VehicleClient:
         self._pub_summary = s.declare_publisher(P.summary_key(self.vid))
         self._pub_session = s.declare_publisher(P.session_key(self.vid))
 
-        # follow mode changes, then resolve the current mode for late joiners
-        self._mode_sub = s.declare_subscriber(P.MODE_KEY, self._on_mode_sample)
+        # follow this vehicle's own mode assignment, then resolve it for boot
+        self._mode_sub = s.declare_subscriber(P.mode_key(self.vid), self._on_mode_sample)
         self._query_initial_mode()
 
         log.info("vehicle %s online (mode=%s)", self.vid, self._mode.value)
@@ -125,7 +125,7 @@ class VehicleClient:
 
     def _query_initial_mode(self) -> None:
         try:
-            for reply in self._session.get(P.MODE_KEY, timeout=2.0):
+            for reply in self._session.get(P.mode_key(self.vid), timeout=2.0):
                 if reply.ok is not None:
                     try:
                         self._set_mode(P.Mode(reply.ok.payload.to_string().strip()))

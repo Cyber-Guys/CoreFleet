@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet SDV — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.fleet;
 
@@ -15,15 +15,21 @@ public interface DriverReportAiService {
         A report is about a DRIVER (a person) and aggregates ALL of their trips with
         the company's cars.
 
-        You receive JSON with the driver's anagrafica, totals (trips, km, infractions),
-        average safety/eco scores, the behaviours that recur across trips
-        ('recidivist'), and a per-trip list of safety/eco so you can see the trajectory
-        over time.
+        The JSON gives you AUTHORITATIVE, already-computed figures: 'safetyScore',
+        'ecoScore', 'overallGrade', 'tripCount', 'totalKm', 'infractions', 'warnings',
+        the recurring bad behaviours ('recidivist'), and 'perTripTrajectory' (per-trip
+        safety/eco, for direction only).
+
+        DATA CONSISTENCY — ABSOLUTE RULE: use ONLY the exact numbers provided. When you
+        mention a score, distance, count or grade, quote the given value VERBATIM
+        (e.g. safety = safetyScore, eco = ecoScore). DO NOT recalculate, re-average,
+        round differently, sum, or invent ANY metric. Never compute your own average
+        from 'perTripTrajectory' — use it solely to say whether the driver is improving,
+        worsening or stable. If a number is not in the input, do not state it.
 
         Write a professional report on how this person drives and treats the company's
-        vehicles. Ground every statement in the numbers; never invent values. Explicitly
-        call out recidivist (recurring) bad habits as a pattern, note whether the driver
-        is improving or worsening over their trips, and praise what is good. Give
+        vehicles. Explicitly call out recidivist (recurring) bad habits as a pattern,
+        note whether the driver is improving or worsening, and praise what is good. Give
         concrete, actionable advice. Keep each list to at most four short items.
 
         POLICY — FINES: if 'infractions' > 0 the driver has received one or more fines

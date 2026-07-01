@@ -61,10 +61,17 @@ const carsUsed = computed(() => {
   return [...new Set(hist.map((t) => t.vid).filter(Boolean))]
 })
 
+let imageTimer = null
+function stopImagePoll() {
+  if (imageTimer) clearInterval(imageTimer)
+  imageTimer = null
+}
+
 watch(selected, (d, prev) => {
   if (!d || (prev && d.did !== prev.did)) {
     report.value = null
     reportError.value = ''
+    stopImagePoll()
   }
 })
 
@@ -83,15 +90,39 @@ async function load() {
 
 async function generate() {
   if (!selected.value) return
+  const did = selected.value.did
   generating.value = true
   reportError.value = ''
+  stopImagePoll()
   try {
-    report.value = await fleetApi.generateDriverReport(selected.value.did)
+    report.value = await fleetApi.generateDriverReport(did)
+    if (report.value?.imageStatus === 'pending') pollImage(did)
   } catch (err) {
-    reportError.value = err.message || 'generazione fallita'
+    reportError.value = err.message || 'report generation failed'
   } finally {
     generating.value = false
   }
+}
+
+// poll the async hourglass image until it's ready
+function pollImage(did) {
+  stopImagePoll()
+  imageTimer = setInterval(async () => {
+    try {
+      const res = await fleetApi.getDriverReportImage(did)
+      if (!report.value || report.value.did !== did) return stopImagePoll()
+      if (res.status === 'ready' && res.imageUrl) {
+        report.value.hourglassImageUrl = res.imageUrl
+        report.value.imageStatus = 'ready'
+        stopImagePoll()
+      } else if (res.status === 'none') {
+        report.value.imageStatus = 'none'
+        stopImagePoll()
+      }
+    } catch {
+      /* keep polling */
+    }
+  }, 3000)
 }
 
 onMounted(() => {
@@ -100,6 +131,7 @@ onMounted(() => {
 })
 onUnmounted(() => {
   if (timer) clearInterval(timer)
+  stopImagePoll()
   controller?.abort()
 })
 </script>

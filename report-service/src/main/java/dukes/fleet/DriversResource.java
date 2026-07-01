@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet SDV — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.fleet;
 
@@ -53,5 +53,17 @@ public class DriversResource {
             return Response.status(Response.Status.BAD_GATEWAY)
                     .entity(Map.of("error", "LLM call failed: " + e.getMessage())).build();
         }
+    }
+
+    /** Poll the async hourglass image: {status: ready|pending|none, imageUrl}. */
+    @GET
+    @Path("{did}/report/image")
+    public Map<String, Object> image(@PathParam("did") String did) {
+        String url = store.driverImageUrl(did);
+        String status = url != null ? "ready" : (store.driverImagePending(did) ? "pending" : "none");
+        Map<String, Object> out = new java.util.HashMap<>();
+        out.put("status", status);
+        out.put("imageUrl", url);
+        return out;
     }
 }

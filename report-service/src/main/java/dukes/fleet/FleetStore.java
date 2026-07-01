@@ -1,16 +1,17 @@
 /********************************************************************************
- * CoreFleet SDV — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.fleet;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
-import dev.langchain4j.data.image.Image;
-import dev.langchain4j.model.image.ImageModel;
-import dev.langchain4j.model.output.Response;
+import dukes.ai.ImageGenerator;
 import dukes.hourglass.HourglassOutput;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -36,20 +37,21 @@ public class FleetStore {
     ReportHistory history;
 
     @Inject
-    ImageModel imageModel;
+    ImageGenerator imageGenerator;
 
     @Inject
     @ConfigProperty(name = "report.fine-safety-penalty", defaultValue = "25")
     int finePenalty;
 
-    @Inject
-    @ConfigProperty(name = "openai.image-enabled", defaultValue = "true")
-    boolean imageEnabled;
-
     private final ConcurrentMap<String, DriverEntity> drivers = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, VehicleEntity> vehicles = new ConcurrentHashMap<>();
     // live "who is driving now" + telemetry, pushed by the server (passthrough)
     private volatile JsonArray active = JsonValue.EMPTY_JSON_ARRAY;
+
+    // async hourglass image generation (decoupled from the text report)
+    private final ExecutorService imageExecutor = Executors.newFixedThreadPool(2);
+    private final ConcurrentMap<String, String> driverImage = new ConcurrentHashMap<>(); // did -> data URI
+    private final Set<String> imageInFlight = ConcurrentHashMap.newKeySet();
 
     // --- ingest -------------------------------------------------------------
     public void ingest(JsonObject trip) {
@@ -120,9 +122,33 @@ public class FleetStore {
             return cached;
         }
 
-        DriverReport r = ai.analyze(driverInputJson(d));
+        // 1) compute the authoritative, already-final numbers first
+        DriverReport r = new DriverReport();
         applyAuthoritative(r, d);
-        r.setHourglassImageUrl(generateHourglassImage(d, r));
+
+        // 2) the LLM only writes the narrative — from those exact numbers
+        DriverReport narrative = ai.analyze(driverInputJson(d, r));
+        r.setSummary(narrative.getSummary());
+        r.setStrengths(narrative.getStrengths());
+        r.setRecommendations(narrative.getRecommendations());
+        r.setMaintenanceHints(narrative.getMaintenanceHints());
+        if (narrative.getHourglass() != null) {
+            r.setHourglass(narrative.getHourglass());
+        }
+
+        // 3) the hourglass visual is generated ASYNCHRONOUSLY so the text report
+        //    returns immediately (no 502 from a slow sequential image call)
+        String existingImg = driverImage.get(did);
+        if (existingImg != null) {
+            r.setHourglassImageUrl(existingImg);
+            r.setImageStatus("ready");
+        } else if (imageGenerator.isEnabled()) {
+            r.setImageStatus("pending");
+            submitImageJob(did, d, r);
+        } else {
+            r.setImageStatus("none");
+        }
+
         r.setGeneratedAt(System.currentTimeMillis());
         r.setCached(false);
 
@@ -130,6 +156,35 @@ public class FleetStore {
         d.setLastReport(r);
         history.add(r);
         return r;
+    }
+
+    private void submitImageJob(String did, DriverEntity d, DriverReport r) {
+        if (!imageInFlight.add(did)) return; // already generating for this driver
+        imageExecutor.submit(() -> {
+            try {
+                String url = generateHourglassImage(d, r);
+                if (url != null) {
+                    driverImage.put(did, url);
+                    r.setHourglassImageUrl(url);
+                    r.setImageStatus("ready");
+                } else {
+                    r.setImageStatus("none");
+                }
+            } catch (Exception e) {
+                r.setImageStatus("none");
+            } finally {
+                imageInFlight.remove(did);
+            }
+        });
+    }
+
+    /** Image status for a driver: "ready" (+url), "pending", or "none". */
+    public String driverImageUrl(String did) {
+        return driverImage.get(did);
+    }
+
+    public boolean driverImagePending(String did) {
+        return imageInFlight.contains(did);
     }
 
     private static String dataHash(DriverEntity d) {
@@ -160,30 +215,19 @@ public class FleetStore {
         }
     }
 
-    /** DALL-E visual of the driver's Hourglass Model (best-effort, may return null). */
+    /** Hourglass Model visual (best-effort, may return null). */
     private String generateHourglassImage(DriverEntity d, DriverReport r) {
-        if (!imageEnabled) return null;
-        try {
-            HourglassOutput h = r.getHourglass();
-            String prompt = "A clean technical infographic drawn as an actual HOURGLASS shape, "
-                    + "dark navy background with neon blue and purple accents, three labelled tiers: "
-                    + "wide TOP = Stakeholders (" + join(h == null ? null : h.getStakeholders(),
-                            "driver, fleet operations, insurer, city") + "); "
-                    + "narrow MIDDLE waist = Capabilities / KPIs (" + join(h == null ? null : h.getCapabilities(),
-                            "safety score, eco score") + "); "
-                    + "wide BOTTOM = Standards & Signals (" + join(h == null ? null : h.getStandardsGroups(),
-                            "OBD2 PIDs, GPS, IMU") + "). "
-                    + "Minimal flat vector style, connected-car fleet telemetry theme, high contrast.";
-            Response<Image> resp = imageModel.generate(prompt);
-            Image img = resp == null ? null : resp.content();
-            if (img == null) return null;
-            if (img.url() != null) return img.url().toString();
-            if (img.base64Data() != null) return "data:image/png;base64," + img.base64Data();
-            return null;
-        } catch (Exception e) {
-            // report is still valid without the image
-            return null;
-        }
+        HourglassOutput h = r.getHourglass();
+        String prompt = "A clean technical infographic drawn as an actual HOURGLASS shape, "
+                + "dark navy background with neon blue and purple accents, three labelled tiers: "
+                + "wide TOP = Stakeholders (" + join(h == null ? null : h.getStakeholders(),
+                        "driver, fleet operations, insurer, city") + "); "
+                + "narrow MIDDLE waist = Capabilities / KPIs (" + join(h == null ? null : h.getCapabilities(),
+                        "safety score, eco score") + "); "
+                + "wide BOTTOM = Standards & Signals (" + join(h == null ? null : h.getStandardsGroups(),
+                        "OBD2 PIDs, GPS, IMU") + "). "
+                + "Minimal flat vector style, connected-car fleet telemetry theme, high contrast.";
+        return imageGenerator.generate(prompt);
     }
 
     private static String join(List<String> list, String fallback) {
@@ -191,19 +235,23 @@ public class FleetStore {
         return String.join(", ", list.subList(0, Math.min(4, list.size())));
     }
 
-    private static String driverInputJson(DriverEntity d) {
+    /** Input for the LLM: the AUTHORITATIVE numbers already on the report (so the
+     *  narrative cites exactly what the dashboard shows), plus the per-trip
+     *  trajectory for context. */
+    private static String driverInputJson(DriverEntity d, DriverReport r) {
         JsonObjectBuilder b = Json.createObjectBuilder()
-                .add("did", d.getDid())
-                .add("name", d.getFullName())
+                .add("did", r.getDid())
+                .add("name", r.getDriverName())
                 .add("nationality", d.getNationality())
-                .add("trips", d.getTrips())
-                .add("totalKm", d.getTotalKm())
-                .add("infractions", d.getInfractions())
+                .add("tripCount", r.getTripCount())
+                .add("totalKm", r.getTotalKm())
+                .add("infractions", r.getInfractions())
                 .add("warnings", d.getWarnings())
-                .add("avgSafety", d.getAvgSafety())
-                .add("avgEco", d.getAvgEco());
+                .add("safetyScore", r.getAvgSafety())
+                .add("ecoScore", r.getAvgEco())
+                .add("overallGrade", r.getOverallGrade());
         var recid = Json.createArrayBuilder();
-        d.getRecidivist().forEach(recid::add);
+        (r.getRecidivist() == null ? java.util.List.<String>of() : r.getRecidivist()).forEach(recid::add);
         b.add("recidivist", recid);
         var trips = Json.createArrayBuilder();
         for (TripScore t : d.getScoreHistory()) {
@@ -211,7 +259,7 @@ public class FleetStore {
                     .add("safety", t.safety()).add("eco", t.eco())
                     .add("distKm", t.distKm()));
         }
-        b.add("perTrip", trips);
+        b.add("perTripTrajectory", trips);
         return b.build().toString();
     }
 

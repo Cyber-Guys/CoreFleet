@@ -21,7 +21,7 @@ const nav = [
       <span class="brand__mark"><AppIcon name="broadcast" :size="22" /></span>
       <span class="brand__text">
         <b>CoreFleet</b>
-        <small>SDV · Control Room</small>
+        <small>Control Room</small>
       </span>
     </div>
 

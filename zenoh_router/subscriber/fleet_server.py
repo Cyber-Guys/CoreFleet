@@ -40,6 +40,11 @@ def _env_float(name: str, default: float) -> float:
         return default
 
 
+def _full_name(data: dict) -> str:
+    """Driver full name (nome + cognome) from a telemetry payload."""
+    return f"{data.get('driver_name', '')} {data.get('driver_surname', '')}".strip()
+
+
 def _bad_behaviours(summary: dict) -> list[str]:
     """Names of the unsafe/wasteful behaviours present in a trip aggregate.
     Note: 'speeding' (a fine) is added separately — not every moment over the
@@ -62,9 +67,10 @@ class FleetServer:
     def __init__(self, router: str) -> None:
         self.router = router
 
-        # congestion thresholds (bytes/s of projected CLOUD traffic), hysteresis
-        self.bw_high = _env_float("BW_LIMIT_BYTES_S", 4000.0)
-        self.bw_low = self.bw_high * _env_float("BW_HYSTERESIS", 0.6)
+        # channel capacity (bytes/s). Vehicles are kept in CLOUD up to
+        # cloud_saturation of it; the overflow is offloaded to EDGE.
+        self.bw_limit = _env_float("BW_LIMIT_BYTES_S", 4000.0)
+        self.cloud_saturation = _env_float("CLOUD_SATURATION", 0.8)
         self.joules_per_mb = _env_float("JOULES_PER_MB", 1100.0)
         self.stats_interval_s = _env_float("STATS_INTERVAL_S", 5.0)
         # a fine (multa) needs sustained speeding AND being caught — not every
@@ -81,8 +87,10 @@ class FleetServer:
         self._lock = threading.Lock()
         self._active: set[str] = set()
         self._last_pos: dict[str, tuple[float, float]] = {}
-        self._current: dict[str, dict] = {}   # vid -> {did, name} currently driving
-        self._mode = P.Mode.CLOUD
+        self._current: dict[str, dict] = {}   # vid -> {did, name, ...} currently driving
+        self._vmode: dict[str, P.Mode] = {}   # vid -> assigned transmission mode
+        self._join_seq: dict[str, int] = {}   # vid -> join order (CLOUD priority)
+        self._seq = 0
 
         # rolling traffic counters (since last stats tick)
         self._raw_msgs = 0
@@ -97,17 +105,18 @@ class FleetServer:
 
         self._stop = threading.Event()
         self._session: zenoh.Session | None = None
-        self._mode_pub = None
 
-    # --- mode broadcasting ---
-    def _publish_mode(self) -> None:
-        if self._mode_pub is not None:
-            self._mode_pub.put(self._mode.value, encoding=zenoh.Encoding.TEXT_PLAIN)
+    # --- per-vehicle mode ---
+    def _publish_vehicle_mode(self, vid: str, mode: P.Mode) -> None:
+        if self._session is not None:
+            self._session.put(P.mode_key(vid), mode.value, encoding=zenoh.Encoding.TEXT_PLAIN)
 
     def _on_mode_query(self, query: "zenoh.Query") -> None:
+        key = str(query.key_expr)
+        vid = P.vid_from_key(key)
         with self._lock:
-            mode = self._mode.value
-        query.reply(P.MODE_KEY, mode, encoding=zenoh.Encoding.TEXT_PLAIN)
+            mode = self._vmode.get(vid, P.Mode.CLOUD).value
+        query.reply(key, mode, encoding=zenoh.Encoding.TEXT_PLAIN)
         query.drop()
 
     # --- presence (liveliness) ---
@@ -117,12 +126,17 @@ class FleetServer:
             return
         with self._lock:
             if sample.kind == zenoh.SampleKind.PUT:
-                self._active.add(vid)
+                if vid not in self._active:
+                    self._active.add(vid)
+                    self._seq += 1
+                    self._join_seq[vid] = self._seq   # older vehicles keep CLOUD priority
                 log.info("[+] vehicle online: %s (active=%d)", vid, len(self._active))
             else:  # DELETE -> token dropped
                 self._active.discard(vid)
                 self._last_pos.pop(vid, None)
                 self._current.pop(vid, None)
+                self._vmode.pop(vid, None)
+                self._join_seq.pop(vid, None)
                 log.info("[-] vehicle offline: %s (active=%d)", vid, len(self._active))
 
     # --- telemetry ---
@@ -140,8 +154,9 @@ class FleetServer:
             self._last_pos[data["vid"]] = (data.get("lat"), data.get("lon"))
             # full live telemetry snapshot (CLOUD, 1 Hz)
             self._current[data["vid"]] = {
-                "vid": data["vid"], "did": data.get("did"), "name": data.get("driver_name"),
-                "tripId": data.get("trip_id"), "mode": "CLOUD",
+                "vid": data["vid"], "did": data.get("did"), "name": _full_name(data),
+                "tripId": data.get("trip_id"),
+                "mode": self._vmode.get(data["vid"], P.Mode.CLOUD).value,
                 "speed_kmh": data.get("speed_kmh"), "rpm": data.get("rpm"),
                 "throttle": data.get("throttle"), "load": data.get("load"),
                 "coolant_c": data.get("coolant_c"), "fuel_lph": data.get("fuel_lph"),
@@ -164,8 +179,9 @@ class FleetServer:
                 self._last_pos[data["vid"]] = (data["lat"], data["lon"])
             # coarser live snapshot in EDGE (window aggregate every 15 s)
             self._current[data["vid"]] = {
-                "vid": data["vid"], "did": data.get("did"), "name": data.get("driver_name"),
-                "tripId": data.get("trip_id"), "mode": "EDGE",
+                "vid": data["vid"], "did": data.get("did"), "name": _full_name(data),
+                "tripId": data.get("trip_id"),
+                "mode": self._vmode.get(data["vid"], P.Mode.CLOUD).value,
                 "speed_kmh": data.get("avg_kmh"), "rpm": data.get("avg_rpm"),
                 "lat": data.get("lat"), "lon": data.get("lon"),
                 "ts": time.time(),
@@ -238,29 +254,38 @@ class FleetServer:
 
     # --- congestion control + stats ---
     def _control_tick(self) -> None:
+        """Keep as many vehicles in CLOUD as the channel allows (up to
+        cloud_saturation of the limit); offload the overflow to EDGE. Older
+        vehicles keep CLOUD priority, so new ones spill to EDGE when saturated."""
+        changes = []
         with self._lock:
-            projected = len(self._active) * self._avg_raw_bytes * P.CLOUD_HZ
-            new_mode = self._mode
-            if self._mode == P.Mode.CLOUD and projected > self.bw_high:
-                new_mode = P.Mode.EDGE
-            elif self._mode == P.Mode.EDGE and projected < self.bw_low:
-                new_mode = P.Mode.CLOUD
-            changed = new_mode != self._mode
-            self._mode = new_mode
+            avg = max(self._avg_raw_bytes, 1.0)
+            # how many 1 Hz CLOUD streams fit under the saturation threshold
+            max_cloud = max(1, int(self.bw_limit * self.cloud_saturation / (avg * P.CLOUD_HZ)))
+            order = sorted(self._active, key=lambda v: self._join_seq.get(v, 0))
+            for i, vid in enumerate(order):
+                want = P.Mode.CLOUD if i < max_cloud else P.Mode.EDGE
+                if self._vmode.get(vid) != want:
+                    self._vmode[vid] = want
+                    changes.append((vid, want))
+                if vid in self._current:
+                    self._current[vid]["mode"] = want.value
+            cloud = min(len(order), max_cloud)
+            edge = max(0, len(order) - max_cloud)
 
-        if changed:
-            log.warning(
-                "MODE -> %s (active=%d, projected=%.0f B/s, high=%.0f low=%.0f)",
-                new_mode.value, len(self._active), projected, self.bw_high, self.bw_low,
-            )
-            self._publish_mode()
+        for vid, want in changes:
+            self._publish_vehicle_mode(vid, want)
+        if changes:
+            log.info("MODE reassign: %d cloud + %d edge (max_cloud=%d, avg_raw=%.0fB) [%d changed]",
+                     cloud, edge, max_cloud, avg, len(changes))
 
     def _stats_tick(self, dt: float) -> None:
         with self._lock:
             active = len(self._active)
+            cloud = sum(1 for v in self._active if self._vmode.get(v) == P.Mode.CLOUD)
+            edge = active - cloud
             raw_msgs, raw_bytes = self._raw_msgs, self._raw_bytes
             sum_msgs, sum_bytes = self._sum_msgs, self._sum_bytes
-            mode = self._mode.value
             self._baseline_bytes += active * self._avg_raw_bytes * P.CLOUD_HZ * dt
             baseline, actual = self._baseline_bytes, self._actual_bytes
             self._raw_msgs = self._raw_bytes = 0
@@ -270,9 +295,9 @@ class FleetServer:
         saved_bytes = max(0.0, baseline - actual)
         saved_j = saved_bytes / 1e6 * self.joules_per_mb
         log.info(
-            "[stats] mode=%s active=%d raw=%d/%.0fB/s summary=%d in=%.0fB/s "
+            "[stats] cloud=%d edge=%d active=%d raw=%d/%.0fB/s summary=%d in=%.0fB/s "
             "saved=%.2fMB ~%.1fJ",
-            mode, active, raw_msgs, raw_bytes / dt, sum_msgs,
+            cloud, edge, active, raw_msgs, raw_bytes / dt, sum_msgs,
             total_bps, saved_bytes / 1e6, saved_j,
         )
 
@@ -293,8 +318,10 @@ class FleetServer:
             log.debug("active push failed (%s): %s", self.active_url, exc)
 
     def _active_loop(self) -> None:
-        """Push live telemetry frequently, independent of the stats cadence."""
+        """Evaluate the mode and push live telemetry frequently, independent of
+        the (slower) stats cadence, so CLOUD<->EDGE switches promptly."""
         while not self._stop.is_set():
+            self._control_tick()
             self._post_active()
             self._stop.wait(self.active_interval_s)
 
@@ -307,25 +334,25 @@ class FleetServer:
         s = self._session
         log.info("server connected to %s", self.router)
 
-        self._mode_pub = s.declare_publisher(P.MODE_KEY)
         subs = [
             s.liveliness().declare_subscriber(P.ALIVE_WILD, self._on_liveliness, history=True),
             s.declare_subscriber(P.RAW_WILD, self._on_raw),
             s.declare_subscriber(P.SUMMARY_WILD, self._on_summary),
             s.declare_subscriber(P.SESSION_WILD, self._on_session),
         ]
-        queryable = s.declare_queryable(P.MODE_KEY, self._on_mode_query)
-        self._publish_mode()  # announce initial CLOUD mode
+        # answer each vehicle's per-vehicle mode query (core/fleet/{vid}/mode)
+        queryable = s.declare_queryable(P.MODE_WILD, self._on_mode_query)
 
         threading.Thread(target=self._active_loop, name="active-push", daemon=True).start()
 
-        log.info("server ready: bw_high=%.0f bw_low=%.0f B/s", self.bw_high, self.bw_low)
+        log.info("server ready: bw_limit=%.0f B/s, cloud_saturation=%.0f%%",
+                 self.bw_limit, self.cloud_saturation * 100)
         last = time.monotonic()
         try:
             while not self._stop.is_set():
                 self._stop.wait(self.stats_interval_s)
                 now = time.monotonic()
-                self._control_tick()
+                # mode is evaluated in the faster active loop; here we just log stats
                 self._stats_tick(max(now - last, 1e-6))
                 last = now
         finally:

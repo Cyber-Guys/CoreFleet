@@ -152,6 +152,7 @@ class VehicleSimulator:
             "vid": self.vid,
             "did": self.did,
             "driver_name": self.driver_name,
+            "driver_surname": self.driver_surname,
             "trip_id": self.trip_id,
             "t": round(t, 1),
             "speed_kmh": round(st.speed_ms * 3.6, 1),     # PID 0x0D
@@ -169,6 +170,7 @@ class VehicleSimulator:
         """Attach the driver/trip identity carried by this trip."""
         d["did"] = self.did
         d["driver_name"] = self.driver_name
+        d["driver_surname"] = self.driver_surname
         d["trip_id"] = self.trip_id
         return d
 

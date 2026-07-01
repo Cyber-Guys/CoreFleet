@@ -1,6 +1,6 @@
-# CoreFleet SDV — Dashboard
+# CoreFleet — Dashboard
 
-Fleet operations console for **CoreFleet SDV**. Vue 3 (Composition API, `<script setup>`),
+Fleet operations console for **CoreFleet**. Vue 3 (Composition API, `<script setup>`),
 vue-router, Chart.js. Cyber/Tech control-room UI with five tabs: **Dashboard**
 (active count, CLOUD/EDGE status, Cloud-vs-Edge chart, connected vehicles + live
 speed), **Veicoli** (registry + a running trip's live telemetry), **Drivers**

@@ -14,6 +14,7 @@ session is published (tagged with the driver) so the server can build a
 driver-centric report and track behaviour across that driver's trips.
 """
 import logging
+import math
 import os
 import random
 import signal
@@ -99,6 +100,8 @@ class FleetSimulator:
         trip_max_s: float = 70.0,
         reconfirm_rate: float = 0.5,
         satisfaction_rate: float = 0.6,
+        demand_period_s: float = 120.0,
+        demand_min: float = 0.35,
     ):
         self.router = router
         self.start_cars = start_cars
@@ -112,6 +115,11 @@ class FleetSimulator:
         self.reconfirm_rate = reconfirm_rate
         # chance a driver is happy with the trip and may come back
         self.satisfaction_rate = satisfaction_rate
+        # demand cycle: how many cars are out varies over time (rush hours vs
+        # quiet), so the offered traffic rises and falls and the server's
+        # CLOUD<->EDGE switch actually alternates
+        self.demand_period_s = demand_period_s
+        self.demand_min = demand_min
 
         self.cars: list[Car] = []
         self.drivers: dict[str, Driver] = {}    # registry of everyone who drove (grows)
@@ -246,6 +254,13 @@ class FleetSimulator:
                     self.idle_returning.add(did)
             self.agents.remove(agent)
 
+    def _demand_target(self, elapsed: float) -> int:
+        """How many cars should be on the road right now (oscillates between
+        demand_min and 1.0 of the fleet over demand_period_s)."""
+        wave = 0.5 + 0.5 * math.sin(2.0 * math.pi * elapsed / self.demand_period_s)
+        frac = self.demand_min + (1.0 - self.demand_min) * wave
+        return max(1, round(len(self.cars) * frac))
+
     # --- lifecycle ----------------------------------------------------------
     def run(self) -> None:
         log.info(
@@ -274,8 +289,10 @@ class FleetSimulator:
                 self.add_car()
                 last_car_add = now
 
-            # every free car gets a driver — a returning customer or a new one
-            while any(not c.in_use for c in self.cars):
+            # start trips only up to the current demand; excess cars stay parked,
+            # so the number of active vehicles (and thus the traffic) oscillates
+            target = self._demand_target(now - started)
+            while len(self.agents) < target and any(not c.in_use for c in self.cars):
                 self._start_trip()
 
             self._stop.wait(0.5)
@@ -321,6 +338,8 @@ def main() -> None:
     # new customers arrive continuously; satisfied ones may reconfirm
     reconfirm_rate = float(os.getenv("RECONFIRM_RATE", "0.5"))
     satisfaction_rate = float(os.getenv("SATISFACTION_RATE", "0.6"))
+    demand_period = float(os.getenv("DEMAND_PERIOD_S", "120"))
+    demand_min = float(os.getenv("DEMAND_MIN", "0.35"))
 
     sim = FleetSimulator(
         router=router,
@@ -333,6 +352,8 @@ def main() -> None:
         trip_max_s=trip_max,
         reconfirm_rate=reconfirm_rate,
         satisfaction_rate=satisfaction_rate,
+        demand_period_s=demand_period,
+        demand_min=demand_min,
     )
     sim.run()
 

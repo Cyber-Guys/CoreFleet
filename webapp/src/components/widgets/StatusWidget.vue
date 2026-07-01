@@ -1,5 +1,5 @@
 <script setup>
-/* Global transmission directive the server broadcasts on core/fleet/mode. */
+/* Overall fleet directive, derived from the per-vehicle CLOUD/EDGE split. */
 import { computed } from 'vue'
 import BaseWidget from '@/components/ui/BaseWidget.vue'
 import { useFleet } from '@/composables/useFleet'
@@ -8,6 +8,7 @@ const { state, cloudCount, edgeCount } = useFleet()
 
 const mode = computed(() => state.fleet.directive)
 const isEdge = computed(() => mode.value === 'EDGE')
+// dynamic glow colour: orange for CLOUD, purple for EDGE
 const accentColor = computed(() => (isEdge.value ? 'var(--purple-glow)' : 'var(--orange)'))
 const reason = computed(() =>
   isEdge.value
@@ -22,7 +23,7 @@ function pct(n) {
 </script>
 
 <template>
-  <BaseWidget title="Status" eyebrow="Server / directive" icon="broadcast" :accent="accentColor">
+  <BaseWidget title="Status" eyebrow="Server / directive" icon="broadcast" :accent="accentColor" scan>
     <template #meta>
       <span class="tag" :style="{ '--c': accentColor }">{{ mode }}</span>
     </template>

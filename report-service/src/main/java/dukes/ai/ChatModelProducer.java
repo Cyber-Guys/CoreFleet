@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet SDV — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.ai;
 

@@ -23,7 +23,7 @@ const pillars = [
 
 <template>
   <div class="about">
-    <BaseWidget title="CoreFleet SDV" eyebrow="About" icon="info" accent="var(--cyan)" scan>
+    <BaseWidget title="CoreFleet" eyebrow="About" icon="info" accent="var(--cyan)" scan>
       <p class="hero">
         A <b>car / taxi sharing</b> fleet where the startup's cars are handed to drivers.
         On-board IoT devices stream telemetry in real time along the

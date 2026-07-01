@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
     Based on the Eclipse o-cei hourglass-template (EPL-2.0).
-    Customised for CoreFleet SDV: completes the Hourglass LLM call and adds a
+    Customised for CoreFleet: completes the Hourglass LLM call and adds a
     driving-report endpoint that consumes the fleet server's session summary.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"

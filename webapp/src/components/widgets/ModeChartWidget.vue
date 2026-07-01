@@ -24,10 +24,9 @@ function data() {
         data: [cloudCount.value, edgeCount.value],
         backgroundColor: [CLOUD, EDGE],
         hoverBackgroundColor: [CLOUD, EDGE],
-        borderColor: 'rgba(10,17,40,0.9)',
-        borderWidth: 3,
-        borderRadius: 6,
-        spacing: 2,
+        borderWidth: 0,
+        borderRadius: 8,
+        spacing: 4,
       },
     ],
   }
@@ -60,7 +59,9 @@ onMounted(() => {
 
 watch([cloudCount, edgeCount], () => {
   if (!chart) return
-  chart.data = data()
+  // mutate the existing dataset in place so Chart.js tweens from the current
+  // arc values instead of re-animating from zero
+  chart.data.datasets[0].data = [cloudCount.value, edgeCount.value]
   chart.update()
 })
 
@@ -109,6 +110,10 @@ onBeforeUnmount(() => chart?.destroy())
   height: 100%;
   display: grid;
   place-items: center;
+}
+/* luminescent glow on the doughnut arcs (no hard border) */
+.chart__canvas canvas {
+  filter: drop-shadow(0 0 9px rgba(255, 122, 26, 0.4)) drop-shadow(0 0 9px rgba(139, 92, 255, 0.35));
 }
 .chart__center {
   position: absolute;

@@ -1,6 +1,11 @@
 # --- build stage ---
 FROM node:20-alpine AS build
 
+# The browser talks to the webapp's OWN origin; nginx proxies onward. Default to
+# the same-origin proxy path so no backend host/IP is baked into the bundle.
+ARG VITE_REPORT_API_URL=/report-api
+ENV VITE_REPORT_API_URL=$VITE_REPORT_API_URL
+
 WORKDIR /app
 COPY package.json package-lock.json* ./
 # use ci when a lockfile is present, fall back to install otherwise
@@ -11,7 +16,12 @@ RUN npm run build
 # --- serve stage ---
 FROM nginx:1.27-alpine AS serve
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Upstreams (overridable for a distributed deployment). The nginx image runs
+# envsubst over templates at startup.
+ENV REPORT_SERVICE_URL=http://fleet-report:8080
+ENV ZENOH_REST_URL=http://zenoh-router:8000
+
+COPY nginx.conf /etc/nginx/templates/default.conf.template
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 80

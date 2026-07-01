@@ -10,7 +10,7 @@ Key space (all under ``core/fleet``):
     core/fleet/{vid}/raw       JSON              V -> S   CLOUD telemetry, 1 Hz
     core/fleet/{vid}/summary   JSON              V -> S   EDGE aggregate, every WINDOW_S
     core/fleet/{vid}/session   JSON              V -> S   final full-session aggregate, on shutdown
-    core/fleet/mode            "CLOUD"|"EDGE"    S -> V   global mode (published + queryable)
+    core/fleet/{vid}/mode      "CLOUD"|"EDGE"    S -> V   per-vehicle mode (published + queryable)
 """
 from __future__ import annotations
 
@@ -47,14 +47,18 @@ def session_key(vid: str) -> str:
     return f"{KEY_ROOT}/{vid}/session"
 
 
+def mode_key(vid: str) -> str:
+    """Per-vehicle mode key: the server assigns each vehicle CLOUD or EDGE so the
+    fleet runs a hybrid mix (CLOUD until the channel saturates, overflow -> EDGE)."""
+    return f"{KEY_ROOT}/{vid}/mode"
+
+
 # --- server-side wildcards ---
 ALIVE_WILD = f"{KEY_ROOT}/*/alive"
 RAW_WILD = f"{KEY_ROOT}/*/raw"
 SUMMARY_WILD = f"{KEY_ROOT}/*/summary"
 SESSION_WILD = f"{KEY_ROOT}/*/session"
-
-#: Global mode key (server publishes here and answers queries on it).
-MODE_KEY = f"{KEY_ROOT}/mode"
+MODE_WILD = f"{KEY_ROOT}/*/mode"
 
 
 def vid_from_key(key: str) -> str:

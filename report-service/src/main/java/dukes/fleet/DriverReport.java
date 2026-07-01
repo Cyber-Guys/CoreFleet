@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet SDV — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.fleet;
 
@@ -27,7 +27,8 @@ public class DriverReport {
     private List<String> maintenanceHints;
     private List<String> recidivist;
     private HourglassOutput hourglass;
-    private String hourglassImageUrl;   // DALL-E visual of the hourglass model
+    private volatile String hourglassImageUrl;   // set asynchronously once generated
+    private volatile String imageStatus = "none"; // none | pending | ready
     private long generatedAt;
     private boolean cached;
 
@@ -149,6 +150,14 @@ public class DriverReport {
 
     public void setHourglassImageUrl(String hourglassImageUrl) {
         this.hourglassImageUrl = hourglassImageUrl;
+    }
+
+    public String getImageStatus() {
+        return imageStatus;
+    }
+
+    public void setImageStatus(String imageStatus) {
+        this.imageStatus = imageStatus;
     }
 
     public long getGeneratedAt() {

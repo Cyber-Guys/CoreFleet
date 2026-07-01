@@ -82,7 +82,7 @@ function when(ts) {
       </ul>
     </div>
 
-    <div v-if="report.hourglass || report.hourglassImageUrl" class="hourglass">
+    <div v-if="report.hourglass || report.hourglassImageUrl || report.imageStatus === 'pending'" class="hourglass">
       <span class="block__label">Hourglass Model</span>
       <img
         v-if="report.hourglassImageUrl"
@@ -91,6 +91,10 @@ function when(ts) {
         alt="Generated hourglass model diagram"
         loading="lazy"
       />
+      <div v-else-if="report.imageStatus === 'pending'" class="hg-loading">
+        <span class="hg-spinner" />
+        <span>Loading image…</span>
+      </div>
       <div class="hourglass__row" v-if="report.hourglass && report.hourglass.stakeholders">
         <span class="hourglass__k">Stakeholder</span>
         <span class="chips"><b v-for="(s, k) in report.hourglass.stakeholders" :key="'st' + k">{{ s }}</b></span>
@@ -296,6 +300,34 @@ function when(ts) {
   border: 1px solid var(--line-strong);
   margin: 0 0 12px;
   background: rgba(0, 0, 0, 0.25);
+}
+.hg-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1 / 1;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  border: 1px dashed var(--line-strong);
+  margin: 0 0 12px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--muted);
+  font-size: 13px;
+}
+.hg-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid rgba(125, 150, 255, 0.25);
+  border-top-color: var(--cyan);
+  animation: hg-spin 0.8s linear infinite;
+}
+@keyframes hg-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .hourglass__row {
   display: flex;
