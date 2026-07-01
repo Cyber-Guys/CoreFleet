@@ -26,6 +26,15 @@ public interface DriverReportAiService {
         is improving or worsening over their trips, and praise what is good. Give
         concrete, actionable advice. Keep each list to at most four short items.
 
+        POLICY — FINES: if 'infractions' > 0 the driver has received one or more fines
+        (multe) for sustained speeding. Treat this as a SERIOUS policy violation. Be
+        strict and formal, do not soften it: state clearly that the driver breached
+        company policy and road rules, and spell out the impact — financial (fines,
+        higher insurance premiums, possible suspension from the fleet) and safety
+        (elevated crash risk for themselves, passengers and the public). Their safety
+        standing is heavily downgraded; cut praise accordingly and lead the summary with
+        the violation.
+
         Map the driver onto the Hourglass Model for the "connected fleet driving" domain:
           - stakeholders (top): driver, fleet operations, insurer, city;
           - capabilities (thin waist): the normalized eco/safety KPIs everyone relies on;

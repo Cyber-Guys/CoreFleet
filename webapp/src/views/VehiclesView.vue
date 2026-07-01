@@ -28,19 +28,22 @@ function select(vid) {
   router.replace({ query: { vid } })
 }
 
-const LIGHT_IT = {
-  low_fuel: 'Carburante basso',
-  low_oil: 'Olio basso',
-  check_engine: 'Motore',
-  tpms: 'Pressione gomme',
+const LIGHT_LABELS = {
+  low_fuel: 'Low fuel',
+  low_oil: 'Low oil',
+  check_engine: 'Check engine',
+  tpms: 'Tyre pressure',
 }
 function light(n) {
-  return LIGHT_IT[n] || n
+  return LIGHT_LABELS[n] || n
 }
 function fuelTone(p) {
   if (p > 50) return 'var(--green)'
   if (p > 20) return 'var(--orange)'
   return 'var(--danger)'
+}
+function modeOf(vid) {
+  return activeMap.value[vid]?.mode || null
 }
 
 const query = computed(() => searchQuery.value.trim().toUpperCase())
@@ -84,7 +87,7 @@ onUnmounted(() => {
   <div class="page">
     <section class="list-panel">
       <header class="panel__head">
-        <span class="cf-eyebrow">Flotta · {{ vehicles.length }} veicoli</span>
+        <span class="cf-eyebrow">Fleet · {{ vehicles.length }} vehicles</span>
       </header>
       <div v-if="filtered.length" class="list">
         <button
@@ -95,26 +98,28 @@ onUnmounted(() => {
           @click="select(v.vid)"
         >
           <span class="row__plate cf-mono">{{ v.vid }}</span>
-          <span class="row__odo cf-mono">{{ Math.round(v.odoKm).toLocaleString('it-IT') }} km</span>
+          <span class="row__odo cf-mono">{{ Math.round(v.odoKm).toLocaleString('en-US') }} km</span>
           <span class="row__fuel"><i :style="{ width: v.fuelPct + '%', '--c': fuelTone(v.fuelPct) }" /></span>
-          <span v-if="v.lights && v.lights.length" class="row__warn">{{ v.lights.length }}⚠</span>
+          <span v-if="modeOf(v.vid)" class="row__mode" :class="modeOf(v.vid).toLowerCase()">{{ modeOf(v.vid) }}</span>
+          <span v-else class="row__mode off">PARKED</span>
         </button>
       </div>
-      <p v-else class="muted">{{ source === 'offline' ? 'Servizio non raggiungibile.' : 'Nessun veicolo.' }}</p>
+      <p v-else class="muted">{{ source === 'offline' ? 'Service unreachable.' : 'No vehicles.' }}</p>
     </section>
 
     <section v-if="selected" class="detail">
       <header class="detail__head">
         <div>
-          <span class="cf-eyebrow">Veicolo</span>
+          <span class="cf-eyebrow">Vehicle</span>
           <h2 class="cf-mono">{{ selected.vid }}</h2>
+          <span class="hmode" :class="(live?.mode || 'parked').toLowerCase()">{{ live?.mode || 'PARKED' }}</span>
         </div>
         <AppIcon name="car" :size="34" class="detail__icon" />
       </header>
 
       <div v-if="live" class="livebox">
         <div class="livebox__head">
-          <span class="livebox__tag"><i />IN CORSA</span>
+          <span class="livebox__tag"><i />ON TRIP</span>
           <span class="livebox__mode cf-mono">{{ live.mode }}</span>
           <RouterLink
             v-if="live.did"
@@ -123,40 +128,40 @@ onUnmounted(() => {
           >{{ live.name }}</RouterLink>
         </div>
         <div class="tel">
-          <div class="tel__cell"><span>Velocità</span><b class="cf-mono">{{ Math.round(live.speed_kmh ?? 0) }}<small>km/h</small></b></div>
+          <div class="tel__cell"><span>Speed</span><b class="cf-mono">{{ Math.round(live.speed_kmh ?? 0) }}<small>km/h</small></b></div>
           <div class="tel__cell"><span>RPM</span><b class="cf-mono">{{ Math.round(live.rpm ?? 0) }}</b></div>
-          <div class="tel__cell" v-if="live.throttle != null"><span>Acceleratore</span><b class="cf-mono">{{ Math.round(live.throttle) }}<small>%</small></b></div>
-          <div class="tel__cell" v-if="live.fuel_lph != null"><span>Consumo</span><b class="cf-mono">{{ (live.fuel_lph).toFixed(1) }}<small>L/h</small></b></div>
-          <div class="tel__cell" v-if="live.coolant_c != null"><span>Refrig.</span><b class="cf-mono">{{ Math.round(live.coolant_c) }}<small>°C</small></b></div>
-          <div class="tel__cell"><span>Posizione</span><b class="cf-mono pos">{{ (live.lat ?? 0).toFixed(4) }}, {{ (live.lon ?? 0).toFixed(4) }}</b></div>
+          <div class="tel__cell" v-if="live.throttle != null"><span>Throttle</span><b class="cf-mono">{{ Math.round(live.throttle) }}<small>%</small></b></div>
+          <div class="tel__cell" v-if="live.fuel_lph != null"><span>Fuel rate</span><b class="cf-mono">{{ (live.fuel_lph).toFixed(1) }}<small>L/h</small></b></div>
+          <div class="tel__cell" v-if="live.coolant_c != null"><span>Coolant</span><b class="cf-mono">{{ Math.round(live.coolant_c) }}<small>°C</small></b></div>
+          <div class="tel__cell"><span>Position</span><b class="cf-mono pos">{{ (live.lat ?? 0).toFixed(4) }}, {{ (live.lon ?? 0).toFixed(4) }}</b></div>
         </div>
-        <p v-if="live.mode === 'EDGE'" class="tel__note">Modalità EDGE: dati aggregati ogni 15s (banda ridotta).</p>
+        <p v-if="live.mode === 'EDGE'" class="tel__note">EDGE mode: aggregated every 15 s (reduced bandwidth).</p>
       </div>
 
       <div class="stats">
-        <div class="stat"><span>Odometro</span><b class="cf-mono">{{ Math.round(selected.odoKm).toLocaleString('it-IT') }} km</b></div>
-        <div class="stat"><span>Viaggi</span><b class="cf-mono">{{ selected.tripCount }}</b></div>
+        <div class="stat"><span>Odometer</span><b class="cf-mono">{{ Math.round(selected.odoKm).toLocaleString('en-US') }} km</b></div>
+        <div class="stat"><span>Trips</span><b class="cf-mono">{{ selected.tripCount }}</b></div>
       </div>
 
       <div class="gauge">
-        <div class="gauge__head"><span>Carburante</span><b class="cf-mono">{{ Math.round(selected.fuelPct) }}%</b></div>
+        <div class="gauge__head"><span>Fuel</span><b class="cf-mono">{{ Math.round(selected.fuelPct) }}%</b></div>
         <div class="gauge__track"><i :style="{ width: selected.fuelPct + '%', '--c': fuelTone(selected.fuelPct) }" /></div>
       </div>
       <div class="gauge">
-        <div class="gauge__head"><span>Olio</span><b class="cf-mono">{{ Math.round(selected.oilPct) }}%</b></div>
+        <div class="gauge__head"><span>Oil</span><b class="cf-mono">{{ Math.round(selected.oilPct) }}%</b></div>
         <div class="gauge__track"><i :style="{ width: selected.oilPct + '%', '--c': fuelTone(selected.oilPct) }" /></div>
       </div>
 
       <div class="lights">
-        <span class="block__label">Spie</span>
+        <span class="block__label">Warning lights</span>
         <div v-if="selected.lights && selected.lights.length" class="chips">
           <b v-for="(l, k) in selected.lights" :key="'l' + k" class="warn">⚠ {{ light(l) }}</b>
         </div>
-        <span v-else class="ok">Nessuna spia accesa</span>
+        <span v-else class="ok">No warnings</span>
       </div>
 
       <div class="drivers">
-        <span class="block__label">Ultimi conducenti</span>
+        <span class="block__label">Recent drivers</span>
         <ul v-if="selected.recentDrivers && selected.recentDrivers.length">
           <li v-for="(d, k) in selected.recentDrivers" :key="'d' + k">
             <span class="dot" />
@@ -237,9 +242,53 @@ onUnmounted(() => {
   height: 100%;
   background: var(--c);
 }
-.row__warn {
-  font-size: 11px;
+.row__mode {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.row__mode.cloud {
   color: var(--orange-glow);
+  background: rgba(255, 122, 26, 0.12);
+  border: 1px solid rgba(255, 122, 26, 0.32);
+}
+.row__mode.edge {
+  color: var(--purple-glow);
+  background: rgba(139, 92, 255, 0.14);
+  border: 1px solid rgba(139, 92, 255, 0.38);
+}
+.row__mode.off {
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+}
+.hmode {
+  display: inline-block;
+  margin-top: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  padding: 3px 9px;
+  border-radius: 6px;
+}
+.hmode.cloud {
+  color: var(--orange-glow);
+  background: rgba(255, 122, 26, 0.12);
+  border: 1px solid rgba(255, 122, 26, 0.34);
+}
+.hmode.edge {
+  color: var(--purple-glow);
+  background: rgba(139, 92, 255, 0.14);
+  border: 1px solid rgba(139, 92, 255, 0.4);
+}
+.hmode.parked {
+  color: var(--faint);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
 }
 .detail__head {
   display: flex;

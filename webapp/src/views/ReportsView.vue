@@ -48,7 +48,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <BaseWidget title="Storico report" eyebrow="Generated reports" icon="report">
+  <BaseWidget title="Report History" eyebrow="Generated reports" icon="report">
     <template #meta>
       <span class="src" :class="source">
         <i />{{ source === 'live' ? 'LIVE' : source === 'loading' ? '…' : 'OFFLINE' }}
@@ -56,8 +56,8 @@ onUnmounted(() => {
     </template>
 
     <p class="lede">
-      Cronologia dei report generati su richiesta dalla scheda <b>Drivers</b>. Un report
-      non viene rigenerato se i dati del conducente non sono cambiati (cache).
+      History of reports generated on demand from the <b>Drivers</b> tab. A report is not
+      regenerated while the driver's data is unchanged (cached).
     </p>
 
     <div v-if="hasResults" class="cards">
@@ -66,14 +66,14 @@ onUnmounted(() => {
 
     <div v-else-if="empty" class="empty">
       <span class="empty__glyph">◴</span>
-      <p class="empty__title">Nessun report generato</p>
-      <p class="empty__hint">Vai su <b>Drivers</b>, scegli un conducente e premi “Genera report”.</p>
+      <p class="empty__title">No reports yet</p>
+      <p class="empty__hint">Go to <b>Drivers</b>, pick a driver and press “Generate Report”.</p>
     </div>
 
     <div v-else class="empty">
       <span class="empty__glyph">⌀</span>
-      <p class="empty__title">Nessun risultato trovato</p>
-      <p class="empty__hint">Nessun report corrisponde a “<b>{{ searchQuery }}</b>”.</p>
+      <p class="empty__title">No results found</p>
+      <p class="empty__hint">No report matches “<b>{{ searchQuery }}</b>”.</p>
     </div>
   </BaseWidget>
 </template>

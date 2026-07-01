@@ -4,7 +4,7 @@ import { computed } from 'vue'
 import AppIcon from '@/components/ui/AppIcon.vue'
 import { useFleet } from '@/composables/useFleet'
 
-const { searchQuery, setSearch, filteredVehicles } = useFleet()
+const { searchQuery, setSearch } = useFleet()
 
 const value = computed({
   get: () => searchQuery.value,
@@ -19,12 +19,11 @@ const value = computed({
       v-model="value"
       type="text"
       class="search__input"
-      placeholder="Cerca per targa o profilo…"
-      aria-label="Cerca veicoli per targa o profilo"
+      placeholder="Search plate, driver…"
+      aria-label="Search vehicles and drivers"
       spellcheck="false"
     />
-    <span v-if="value" class="search__count cf-mono">{{ filteredVehicles.length }}</span>
-    <button v-if="value" class="search__clear" type="button" aria-label="Pulisci ricerca" @click="setSearch('')">
+    <button v-if="value" class="search__clear" type="button" aria-label="Clear search" @click="setSearch('')">
       ✕
     </button>
   </div>

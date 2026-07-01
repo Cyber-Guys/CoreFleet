@@ -7,10 +7,11 @@ const { state, activeCount } = useFleet()
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: 'gauge' },
-  { to: '/vehicles', label: 'Veicoli', icon: 'car' },
+  { to: '/vehicles', label: 'Vehicles', icon: 'car' },
   { to: '/drivers', label: 'Drivers', icon: 'users' },
+  { to: '/network', label: 'Network', icon: 'activity' },
   { to: '/reports', label: 'Reports', icon: 'report' },
-  { to: '/about', label: 'About Us', icon: 'info' },
+  { to: '/about', label: 'About', icon: 'info' },
 ]
 </script>
 
@@ -41,10 +42,10 @@ const nav = [
 
     <div class="status">
       <div class="status__row">
-        <StatusDot :size="8" />
-        <span>Router online</span>
+        <StatusDot :size="8" :color="state.fleet.online ? 'var(--green)' : 'var(--danger)'" :live="state.fleet.online" />
+        <span>{{ state.fleet.online ? 'Fleet API online' : 'Fleet API offline' }}</span>
       </div>
-      <p class="status__router cf-mono">{{ state.fleet.router || 'tcp/—' }}</p>
+      <p class="status__router cf-mono">mode · {{ state.fleet.directive }}</p>
       <div class="status__metric">
         <span class="cf-eyebrow">Active</span>
         <span class="status__n cf-mono">{{ activeCount }}</span>

@@ -8,6 +8,9 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import dev.langchain4j.data.image.Image;
+import dev.langchain4j.model.image.ImageModel;
+import dev.langchain4j.model.output.Response;
 import dukes.hourglass.HourglassOutput;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -17,6 +20,7 @@ import jakarta.json.JsonObject;
 import jakarta.json.JsonObjectBuilder;
 import jakarta.json.JsonString;
 import jakarta.json.JsonValue;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * In-memory fleet registry: accumulates driver and vehicle stats from ingested
@@ -30,6 +34,17 @@ public class FleetStore {
 
     @Inject
     ReportHistory history;
+
+    @Inject
+    ImageModel imageModel;
+
+    @Inject
+    @ConfigProperty(name = "report.fine-safety-penalty", defaultValue = "25")
+    int finePenalty;
+
+    @Inject
+    @ConfigProperty(name = "openai.image-enabled", defaultValue = "true")
+    boolean imageEnabled;
 
     private final ConcurrentMap<String, DriverEntity> drivers = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, VehicleEntity> vehicles = new ConcurrentHashMap<>();
@@ -107,6 +122,7 @@ public class FleetStore {
 
         DriverReport r = ai.analyze(driverInputJson(d));
         applyAuthoritative(r, d);
+        r.setHourglassImageUrl(generateHourglassImage(d, r));
         r.setGeneratedAt(System.currentTimeMillis());
         r.setCached(false);
 
@@ -121,20 +137,58 @@ public class FleetStore {
                 + "|" + (long) (d.getAvgSafety() * 10) + "|" + (long) (d.getAvgEco() * 10);
     }
 
-    private static void applyAuthoritative(DriverReport r, DriverEntity d) {
+    private void applyAuthoritative(DriverReport r, DriverEntity d) {
         r.setDid(d.getDid());
         r.setDriverName(d.getFullName());
         r.setTripCount(d.getTrips());
         r.setTotalKm(d.getTotalKm());
         r.setInfractions(d.getInfractions());
-        r.setAvgSafety((int) Math.round(d.getAvgSafety()));
-        r.setAvgEco((int) Math.round(d.getAvgEco()));
+
+        // a fine (multa) is a serious policy violation: heavily downgrade safety
+        int rawSafety = (int) Math.round(d.getAvgSafety());
+        int adjSafety = d.getInfractions() > 0
+                ? Math.max(0, rawSafety - finePenalty * d.getInfractions())
+                : rawSafety;
+        int eco = (int) Math.round(d.getAvgEco());
+        r.setAvgSafety(adjSafety);
+        r.setAvgEco(eco);
         r.setRecidivist(d.getRecidivist());
-        double avg = (d.getAvgSafety() + d.getAvgEco()) / 2.0;
+        double avg = (adjSafety + eco) / 2.0;
         r.setOverallGrade(avg >= 85 ? "A" : avg >= 70 ? "B" : avg >= 55 ? "C" : "D");
         if (r.getHourglass() == null) {
             r.setHourglass(new HourglassOutput());
         }
+    }
+
+    /** DALL-E visual of the driver's Hourglass Model (best-effort, may return null). */
+    private String generateHourglassImage(DriverEntity d, DriverReport r) {
+        if (!imageEnabled) return null;
+        try {
+            HourglassOutput h = r.getHourglass();
+            String prompt = "A clean technical infographic drawn as an actual HOURGLASS shape, "
+                    + "dark navy background with neon blue and purple accents, three labelled tiers: "
+                    + "wide TOP = Stakeholders (" + join(h == null ? null : h.getStakeholders(),
+                            "driver, fleet operations, insurer, city") + "); "
+                    + "narrow MIDDLE waist = Capabilities / KPIs (" + join(h == null ? null : h.getCapabilities(),
+                            "safety score, eco score") + "); "
+                    + "wide BOTTOM = Standards & Signals (" + join(h == null ? null : h.getStandardsGroups(),
+                            "OBD2 PIDs, GPS, IMU") + "). "
+                    + "Minimal flat vector style, connected-car fleet telemetry theme, high contrast.";
+            Response<Image> resp = imageModel.generate(prompt);
+            Image img = resp == null ? null : resp.content();
+            if (img == null) return null;
+            if (img.url() != null) return img.url().toString();
+            if (img.base64Data() != null) return "data:image/png;base64," + img.base64Data();
+            return null;
+        } catch (Exception e) {
+            // report is still valid without the image
+            return null;
+        }
+    }
+
+    private static String join(List<String> list, String fallback) {
+        if (list == null || list.isEmpty()) return fallback;
+        return String.join(", ", list.subList(0, Math.min(4, list.size())));
     }
 
     private static String driverInputJson(DriverEntity d) {

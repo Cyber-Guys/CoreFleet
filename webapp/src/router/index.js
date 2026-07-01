@@ -11,19 +11,25 @@ const routes = [
     path: '/vehicles',
     name: 'vehicles',
     component: () => import('@/views/VehiclesView.vue'),
-    meta: { title: 'Veicoli' },
+    meta: { title: 'Vehicles' },
   },
   {
     path: '/drivers',
     name: 'drivers',
     component: () => import('@/views/DriversView.vue'),
-    meta: { title: 'Conducenti' },
+    meta: { title: 'Drivers' },
+  },
+  {
+    path: '/network',
+    name: 'network',
+    component: () => import('@/views/NetworkAnalysisView.vue'),
+    meta: { title: 'Network Analysis' },
   },
   {
     path: '/reports',
     name: 'reports',
     component: () => import('@/views/ReportsView.vue'),
-    meta: { title: 'Storico Report' },
+    meta: { title: 'Reports' },
   },
   {
     path: '/about',

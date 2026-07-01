@@ -54,7 +54,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <BaseWidget title="Veicoli connessi" eyebrow="Registry · live" icon="gauge">
+  <BaseWidget title="Connected vehicles" eyebrow="Registry · live" icon="gauge">
     <template #meta>
       <span class="counter cf-mono">{{ active.length }}</span>
     </template>
@@ -86,8 +86,8 @@ onUnmounted(() => {
 
     <div v-else class="empty">
       <span class="empty__glyph">◴</span>
-      <p class="empty__title">{{ source === 'offline' ? 'Servizio non raggiungibile' : 'Nessun veicolo in guida' }}</p>
-      <p class="empty__hint">Si popola quando i conducenti sono in strada.</p>
+      <p class="empty__title">{{ source === 'offline' ? 'Service unreachable' : 'No vehicles on the road' }}</p>
+      <p class="empty__hint">Populates when drivers are out driving.</p>
     </div>
   </BaseWidget>
 </template>

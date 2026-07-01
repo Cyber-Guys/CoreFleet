@@ -27,6 +27,7 @@ public class DriverReport {
     private List<String> maintenanceHints;
     private List<String> recidivist;
     private HourglassOutput hourglass;
+    private String hourglassImageUrl;   // DALL-E visual of the hourglass model
     private long generatedAt;
     private boolean cached;
 
@@ -140,6 +141,14 @@ public class DriverReport {
 
     public void setHourglass(HourglassOutput hourglass) {
         this.hourglass = hourglass;
+    }
+
+    public String getHourglassImageUrl() {
+        return hourglassImageUrl;
+    }
+
+    public void setHourglassImageUrl(String hourglassImageUrl) {
+        this.hourglassImageUrl = hourglassImageUrl;
     }
 
     public long getGeneratedAt() {

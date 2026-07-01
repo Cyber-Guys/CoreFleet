@@ -51,7 +51,7 @@ onMounted(() => {
           titleColor: '#e8edff',
           bodyColor: '#8a98c8',
           padding: 10,
-          callbacks: { label: (c) => ` ${c.label}: ${c.parsed} veicoli` },
+          callbacks: { label: (c) => ` ${c.label}: ${c.parsed} vehicles` },
         },
       },
     },

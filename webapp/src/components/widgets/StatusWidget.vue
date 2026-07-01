@@ -11,8 +11,8 @@ const isEdge = computed(() => mode.value === 'EDGE')
 const accentColor = computed(() => (isEdge.value ? 'var(--purple-glow)' : 'var(--orange)'))
 const reason = computed(() =>
   isEdge.value
-    ? 'Canale saturo — i veicoli aggregano sul bordo'
-    : 'Banda disponibile — streaming in tempo reale',
+    ? 'Channel saturated — vehicles aggregate on the edge'
+    : 'Bandwidth available — real-time streaming',
 )
 
 function pct(n) {

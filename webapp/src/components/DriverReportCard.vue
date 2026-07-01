@@ -4,16 +4,16 @@ defineProps({
   report: { type: Object, required: true },
 })
 
-const BEHAVIOUR_IT = {
-  harsh_accel: 'accelerate brusche',
-  harsh_brake: 'frenate brusche',
-  speeding: 'eccesso velocità',
-  overrev: 'fuorigiri',
-  cold_overrev: 'fuorigiri a freddo',
-  excess_idle: 'sosta eccessiva',
+const BEHAVIOUR_EN = {
+  harsh_accel: 'harsh acceleration',
+  harsh_brake: 'harsh braking',
+  speeding: 'speeding',
+  overrev: 'over-revving',
+  cold_overrev: 'cold-engine over-rev',
+  excess_idle: 'excessive idling',
 }
 function behaviour(n) {
-  return BEHAVIOUR_IT[n] || n
+  return BEHAVIOUR_EN[n] || n
 }
 function tone(s) {
   if (s >= 80) return 'var(--green)'
@@ -22,7 +22,7 @@ function tone(s) {
 }
 function when(ts) {
   if (!ts) return ''
-  return new Date(ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' })
+  return new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
 }
 </script>
 
@@ -39,60 +39,67 @@ function when(ts) {
     </header>
 
     <div class="kpis">
-      <span><b class="cf-mono">{{ report.tripCount }}</b> viaggi</span>
+      <span><b class="cf-mono">{{ report.tripCount }}</b> trips</span>
       <span><b class="cf-mono">{{ Math.round(report.totalKm) }}</b> km</span>
-      <span><b class="cf-mono">{{ report.infractions }}</b> multe</span>
-      <span v-if="report.cached" class="cached">cache</span>
-      <span v-else class="fresh">nuovo</span>
+      <span><b class="cf-mono">{{ report.infractions }}</b> fines</span>
+      <span v-if="report.cached" class="cached">cached</span>
+      <span v-else class="fresh">new</span>
       <span v-if="report.generatedAt" class="ts">{{ when(report.generatedAt) }}</span>
     </div>
 
     <div class="metric">
-      <div class="metric__head"><span>Sicurezza media</span><b class="cf-mono">{{ report.avgSafety }}</b></div>
+      <div class="metric__head"><span>Avg safety</span><b class="cf-mono">{{ report.avgSafety }}</b></div>
       <div class="metric__track"><i :style="{ width: (report.avgSafety || 0) + '%', '--c': tone(report.avgSafety || 0) }" /></div>
     </div>
     <div class="metric">
-      <div class="metric__head"><span>Eco media</span><b class="cf-mono">{{ report.avgEco }}</b></div>
+      <div class="metric__head"><span>Avg eco</span><b class="cf-mono">{{ report.avgEco }}</b></div>
       <div class="metric__track"><i :style="{ width: (report.avgEco || 0) + '%', '--c': tone(report.avgEco || 0) }" /></div>
     </div>
 
     <div v-if="report.recidivist && report.recidivist.length" class="recid">
-      <span class="recid__label">⟳ Recidivo su</span>
+      <span class="recid__label">⟳ Repeat offender:</span>
       <span class="chips"><b v-for="(b, k) in report.recidivist" :key="'rc' + k">{{ behaviour(b) }}</b></span>
     </div>
 
     <p v-if="report.summary" class="rep__summary">{{ report.summary }}</p>
 
     <div v-if="report.strengths && report.strengths.length" class="block">
-      <span class="block__label">Punti di forza</span>
+      <span class="block__label">Strengths</span>
       <ul class="block__list block__list--ok">
         <li v-for="(t, k) in report.strengths.slice(0, 4)" :key="'s' + k">{{ t }}</li>
       </ul>
     </div>
     <div v-if="report.recommendations && report.recommendations.length" class="block">
-      <span class="block__label">Consigli</span>
+      <span class="block__label">Recommendations</span>
       <ul class="block__list">
         <li v-for="(t, k) in report.recommendations.slice(0, 4)" :key="'r' + k">{{ t }}</li>
       </ul>
     </div>
     <div v-if="report.maintenanceHints && report.maintenanceHints.length" class="block">
-      <span class="block__label">Manutenzione</span>
+      <span class="block__label">Maintenance</span>
       <ul class="block__list block__list--warn">
         <li v-for="(t, k) in report.maintenanceHints.slice(0, 4)" :key="'m' + k">{{ t }}</li>
       </ul>
     </div>
 
-    <div v-if="report.hourglass" class="hourglass">
-      <span class="block__label">Hourglass</span>
-      <div class="hourglass__row" v-if="report.hourglass.stakeholders">
+    <div v-if="report.hourglass || report.hourglassImageUrl" class="hourglass">
+      <span class="block__label">Hourglass Model</span>
+      <img
+        v-if="report.hourglassImageUrl"
+        :src="report.hourglassImageUrl"
+        class="hg-img"
+        alt="Generated hourglass model diagram"
+        loading="lazy"
+      />
+      <div class="hourglass__row" v-if="report.hourglass && report.hourglass.stakeholders">
         <span class="hourglass__k">Stakeholder</span>
         <span class="chips"><b v-for="(s, k) in report.hourglass.stakeholders" :key="'st' + k">{{ s }}</b></span>
       </div>
-      <div class="hourglass__row hourglass__row--waist" v-if="report.hourglass.capabilities">
+      <div class="hourglass__row hourglass__row--waist" v-if="report.hourglass && report.hourglass.capabilities">
         <span class="hourglass__k">Capabilities</span>
         <span class="chips"><b v-for="(s, k) in report.hourglass.capabilities" :key="'cp' + k">{{ s }}</b></span>
       </div>
-      <div class="hourglass__row" v-if="report.hourglass.standardsGroups">
+      <div class="hourglass__row" v-if="report.hourglass && report.hourglass.standardsGroups">
         <span class="hourglass__k">Standards</span>
         <span class="chips"><b v-for="(s, k) in report.hourglass.standardsGroups" :key="'sg' + k">{{ s }}</b></span>
       </div>
@@ -278,6 +285,17 @@ function when(ts) {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
+}
+.hg-img {
+  display: block;
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line-strong);
+  margin: 0 0 12px;
+  background: rgba(0, 0, 0, 0.25);
 }
 .hourglass__row {
   display: flex;

@@ -29,16 +29,16 @@ const reportError = ref('')
 let timer = null
 let controller = null
 
-const BEHAVIOUR_IT = {
-  harsh_accel: 'accelerate brusche',
-  harsh_brake: 'frenate brusche',
-  speeding: 'eccesso velocità',
-  overrev: 'fuorigiri',
-  cold_overrev: 'fuorigiri a freddo',
-  excess_idle: 'sosta eccessiva',
+const BEHAVIOUR_EN = {
+  harsh_accel: 'harsh acceleration',
+  harsh_brake: 'harsh braking',
+  speeding: 'speeding',
+  overrev: 'over-revving',
+  cold_overrev: 'cold-engine over-rev',
+  excess_idle: 'excessive idling',
 }
 function behaviour(n) {
-  return BEHAVIOUR_IT[n] || n
+  return BEHAVIOUR_EN[n] || n
 }
 function tone(s) {
   if (s >= 80) return 'var(--green)'
@@ -107,7 +107,7 @@ onUnmounted(() => {
 <template>
   <div class="page">
     <section class="list-panel">
-      <header class="panel__head"><span class="cf-eyebrow">Conducenti · {{ drivers.length }}</span></header>
+      <header class="panel__head"><span class="cf-eyebrow">Drivers · {{ drivers.length }}</span></header>
       <div v-if="filtered.length" class="list">
         <button
           v-for="d in filtered"
@@ -118,47 +118,47 @@ onUnmounted(() => {
         >
           <span class="avatar">{{ (d.name || '?').charAt(0) }}</span>
           <span class="row__name">
-            {{ d.fullName }}<small class="cf-mono">{{ d.did }} · {{ d.trips }} viaggi</small>
+            {{ d.fullName }}<small class="cf-mono">{{ d.did }} · {{ d.trips }} trips</small>
           </span>
-          <span v-if="d.infractions" class="row__fines">{{ d.infractions }} multe</span>
+          <span v-if="d.infractions" class="row__fines">{{ d.infractions }} fines</span>
         </button>
       </div>
-      <p v-else class="muted">{{ source === 'offline' ? 'Servizio non raggiungibile.' : 'Nessun conducente.' }}</p>
+      <p v-else class="muted">{{ source === 'offline' ? 'Service unreachable.' : 'No drivers.' }}</p>
     </section>
 
     <section v-if="selected" class="detail">
       <header class="detail__head">
         <div>
-          <span class="cf-eyebrow">Conducente</span>
+          <span class="cf-eyebrow">Driver</span>
           <h2>{{ selected.fullName }}</h2>
-          <span class="anag cf-mono">{{ selected.did }} · CF {{ selected.cf }} · {{ selected.nationality }}</span>
+          <span class="anag cf-mono">{{ selected.did }} · Tax ID {{ selected.cf }} · {{ selected.nationality }}</span>
         </div>
         <AppIcon name="users" :size="34" class="detail__icon" />
       </header>
 
       <div class="stats">
-        <div class="stat"><span>Viaggi</span><b class="cf-mono">{{ selected.trips }}</b></div>
-        <div class="stat"><span>Km totali</span><b class="cf-mono">{{ Math.round(selected.totalKm).toLocaleString('it-IT') }}</b></div>
-        <div class="stat"><span>Multe</span><b class="cf-mono" :class="{ bad: selected.infractions }">{{ selected.infractions }}</b></div>
-        <div class="stat"><span>Warning</span><b class="cf-mono">{{ selected.warnings }}</b></div>
+        <div class="stat"><span>Trips</span><b class="cf-mono">{{ selected.trips }}</b></div>
+        <div class="stat"><span>Total km</span><b class="cf-mono">{{ Math.round(selected.totalKm).toLocaleString('en-US') }}</b></div>
+        <div class="stat"><span>Fines</span><b class="cf-mono" :class="{ bad: selected.infractions }">{{ selected.infractions }}</b></div>
+        <div class="stat"><span>Warnings</span><b class="cf-mono">{{ selected.warnings }}</b></div>
       </div>
 
       <div class="metric">
-        <div class="metric__head"><span>Sicurezza media</span><b class="cf-mono">{{ selected.avgSafety }}</b></div>
+        <div class="metric__head"><span>Avg safety</span><b class="cf-mono">{{ selected.avgSafety }}</b></div>
         <div class="metric__track"><i :style="{ width: selected.avgSafety + '%', '--c': tone(selected.avgSafety) }" /></div>
       </div>
       <div class="metric">
-        <div class="metric__head"><span>Eco media</span><b class="cf-mono">{{ selected.avgEco }}</b></div>
+        <div class="metric__head"><span>Avg eco</span><b class="cf-mono">{{ selected.avgEco }}</b></div>
         <div class="metric__track"><i :style="{ width: selected.avgEco + '%', '--c': tone(selected.avgEco) }" /></div>
       </div>
 
       <div v-if="selected.recidivist && selected.recidivist.length" class="recid">
-        <span class="recid__label">⟳ Recidivo su</span>
+        <span class="recid__label">⟳ Repeat offender:</span>
         <span class="chips"><b v-for="(b, k) in selected.recidivist" :key="'rc' + k">{{ behaviour(b) }}</b></span>
       </div>
 
       <div class="cars">
-        <span class="block__label">Auto usate ({{ carsUsed.length }})</span>
+        <span class="block__label">Cars used ({{ carsUsed.length }})</span>
         <div v-if="carsUsed.length" class="chips">
           <RouterLink
             v-for="vid in carsUsed"
@@ -173,7 +173,7 @@ onUnmounted(() => {
       <div class="actions">
         <button class="gen" :disabled="generating || !selected.trips" @click="generate">
           <AppIcon name="report" :size="17" />
-          {{ generating ? 'Generazione…' : 'Genera report' }}
+          {{ generating ? 'Generating…' : 'Generate Report' }}
         </button>
         <span v-if="reportError" class="err">{{ reportError }}</span>
       </div>

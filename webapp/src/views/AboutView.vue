@@ -5,18 +5,18 @@ import AppIcon from '@/components/ui/AppIcon.vue'
 const pillars = [
   {
     icon: 'broadcast',
-    title: 'Telemetria su Zenoh',
-    body: 'Ogni veicolo è un dispositivo edge (OBD2 + GPS + IMU) che pubblica le telemetrie sul router Zenoh.',
+    title: 'Telemetry over Zenoh',
+    body: 'Every vehicle is an edge device (OBD2 + GPS + IMU) publishing telemetry to the Zenoh router.',
   },
   {
     icon: 'cpu',
-    title: 'Cloud ↔ Edge adattivo',
-    body: 'Il server misura la banda e commuta la flotta tra streaming in tempo reale (CLOUD) e aggregazione locale (EDGE).',
+    title: 'Adaptive Cloud ↔ Edge',
+    body: 'The server measures bandwidth and switches the fleet between real-time streaming (CLOUD) and local aggregation (EDGE).',
   },
   {
     icon: 'report',
-    title: 'Report con LLM',
-    body: 'A fine sessione un servizio Jakarta EE genera il report di guida secondo il modello a clessidra.',
+    title: 'LLM reports',
+    body: 'A Jakarta EE service generates on-demand driver reports mapped onto the Hourglass Model.',
   },
 ]
 </script>
@@ -25,9 +25,9 @@ const pillars = [
   <div class="about">
     <BaseWidget title="CoreFleet SDV" eyebrow="About" icon="info" accent="var(--cyan)" scan>
       <p class="hero">
-        Una flotta di <b>car/taxi sharing</b> in cui le auto della startup vengono affidate ai
-        driver. I dispositivi IoT a bordo trasmettono le telemetrie in tempo reale lungo il
-        <b>continuum cloud–edge</b>, riducendo banda ed energia quando la rete si satura.
+        A <b>car / taxi sharing</b> fleet where the startup's cars are handed to drivers.
+        On-board IoT devices stream telemetry in real time along the
+        <b>cloud–edge continuum</b>, cutting bandwidth and energy when the network saturates.
       </p>
 
       <div class="pillars">

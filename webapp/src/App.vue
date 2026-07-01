@@ -13,12 +13,12 @@ let clock = null
 
 const pageTitle = computed(() => route.meta.title || 'Dashboard')
 const clockText = computed(() =>
-  now.value.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+  now.value.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
 )
 const updatedText = computed(() => {
   if (!state.fleet.updatedAt) return '—'
   const s = Math.max(0, Math.round((now.value.getTime() - state.fleet.updatedAt) / 1000))
-  return s < 2 ? 'ora' : `${s}s fa`
+  return s < 2 ? 'now' : `${s}s ago`
 })
 
 onMounted(async () => {

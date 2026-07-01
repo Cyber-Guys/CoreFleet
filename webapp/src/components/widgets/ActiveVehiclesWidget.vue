@@ -3,18 +3,19 @@ import BaseWidget from '@/components/ui/BaseWidget.vue'
 import StatusDot from '@/components/ui/StatusDot.vue'
 import { useFleet } from '@/composables/useFleet'
 
-const { activeCount, cloudCount, edgeCount } = useFleet()
+const { activeCount, totalFleet, cloudCount, edgeCount } = useFleet()
 </script>
 
 <template>
-  <BaseWidget title="Veicoli Attivi" eyebrow="Fleet / live" icon="car" scan>
+  <BaseWidget title="Active Vehicles" eyebrow="Fleet / live" icon="car" scan>
     <template #meta>
       <span class="live"><StatusDot :size="9" /> LIVE</span>
     </template>
 
     <div class="readout">
-      <span class="count cf-mono">{{ String(activeCount).padStart(2, '0') }}</span>
-      <span class="unit">veicoli<br />connessi</span>
+      <span class="count cf-mono">{{ activeCount }}</span>
+      <span class="total cf-mono">/ {{ totalFleet }}</span>
+      <span class="unit">on the<br />road</span>
     </div>
 
     <div class="split">
@@ -54,6 +55,13 @@ const { activeCount, cloudCount, edgeCount } = useFleet()
   line-height: 0.9;
   color: var(--text);
   text-shadow: 0 0 26px rgba(139, 92, 255, 0.55);
+}
+.total {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(26px, 3.4vw, 38px);
+  line-height: 0.9;
+  color: var(--muted);
 }
 .unit {
   font-size: 13px;
