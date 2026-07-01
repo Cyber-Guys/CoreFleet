@@ -5,8 +5,8 @@ package dukes.ai;
 
 import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.service.AiServices;
+import dukes.fleet.DriverReportAiService;
 import dukes.hourglass.HourglassAiService;
-import dukes.report.DrivingReportAiService;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.inject.Inject;
@@ -30,7 +30,7 @@ public class AiServiceFactory {
 
     @Produces
     @ApplicationScoped
-    public DrivingReportAiService drivingReportAiService() {
-        return AiServices.create(DrivingReportAiService.class, chatModel);
+    public DriverReportAiService driverReportAiService() {
+        return AiServices.create(DriverReportAiService.class, chatModel);
     }
 }

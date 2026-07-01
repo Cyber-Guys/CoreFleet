@@ -9,7 +9,8 @@ from .config import (
     IDLE_RPM, IDLE_SPEED_MS, MAX_RPM, COLD_THRESHOLD_C,
     WHEEL_CIRCUMFERENCE_M, FINAL_DRIVE, GEAR_RATIOS,
     TARGET_COOLANT_C, COOLANT_TAU_S, HARSH_ACCEL_MS2,
-    HARSH_BRAKE_MS2, SPEED_LIMITS_KMH
+    HARSH_BRAKE_MS2, SPEED_LIMITS_KMH,
+    FUEL_PCT_PER_KM, OIL_PCT_PER_KM, OIL_BASE_WEAR
 )
 
 
@@ -22,12 +23,25 @@ class VehicleSimulator:
         profile: DriverProfile,
         did: str = "",
         driver_name: str = "",
+        driver_surname: str = "",
+        driver_cf: str = "",
+        driver_nationality: str = "",
         trip_id: str = "",
+        odo_km: float = 0.0,
+        fuel_pct: float = 100.0,
+        oil_pct: float = 100.0,
     ):
         self.vid = vid          # car / licence plate
         self.did = did          # driver taking this trip
         self.driver_name = driver_name
+        self.driver_surname = driver_surname
+        self.driver_cf = driver_cf
+        self.driver_nationality = driver_nationality
         self.trip_id = trip_id  # unique id for this trip
+        # car state carried in from the fleet (persists across trips)
+        self.odo0 = odo_km
+        self.fuel0 = fuel_pct
+        self.oil0 = oil_pct
         self.p = profile
         self.st = VehicleState(lat=init_pos[0], lon=init_pos[1])
         # two aggregation scopes: a rolling window flushed in EDGE mode, and a
@@ -137,6 +151,7 @@ class VehicleSimulator:
         return {
             "vid": self.vid,
             "did": self.did,
+            "driver_name": self.driver_name,
             "trip_id": self.trip_id,
             "t": round(t, 1),
             "speed_kmh": round(st.speed_ms * 3.6, 1),     # PID 0x0D
@@ -157,6 +172,28 @@ class VehicleSimulator:
         d["trip_id"] = self.trip_id
         return d
 
+    def vehicle_snapshot(self) -> dict:
+        """Post-trip car state: odometer + fuel/oil levels + warning lights.
+        Simplified (not physical): levels fall with the distance driven."""
+        dist_km = self.session_agg.distance_m / 1000.0
+        fuel = max(0.0, self.fuel0 - dist_km * FUEL_PCT_PER_KM)
+        oil = max(0.0, self.oil0 - dist_km * OIL_PCT_PER_KM - OIL_BASE_WEAR)
+        odo = self.odo0 + dist_km
+
+        lights: list[str] = []
+        if fuel < 15:
+            lights.append("low_fuel")
+        if oil < 20:
+            lights.append("low_oil")
+        if self.session_agg.cold_overrev_s > 0 or self.session_agg.overrev_s > 5:
+            lights.append("check_engine")
+        return {
+            "odo_km": round(odo, 1),
+            "fuel_pct": round(fuel, 1),
+            "oil_pct": round(oil, 1),
+            "lights": lights,
+        }
+
     def window_summary(self) -> dict:
         """Aggregate of the current EDGE window (last WINDOW_S seconds)."""
         s = self.window_agg.summary_dict(self.vid)
@@ -169,6 +206,12 @@ class VehicleSimulator:
         self.window_agg = EdgeAggregate()
 
     def session_summary(self) -> dict:
-        """Full-session aggregate, used to build the end-of-session report."""
-        return self._tag(self.session_agg.summary_dict(self.vid))
+        """Full-session aggregate + driver anagrafica + car state, used to build
+        the end-of-session ingest payload."""
+        s = self._tag(self.session_agg.summary_dict(self.vid))
+        s["driver_surname"] = self.driver_surname
+        s["driver_cf"] = self.driver_cf
+        s["driver_nationality"] = self.driver_nationality
+        s["vehicle"] = self.vehicle_snapshot()
+        return s
 

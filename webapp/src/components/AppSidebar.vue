@@ -7,6 +7,8 @@ const { state, activeCount } = useFleet()
 
 const nav = [
   { to: '/', label: 'Dashboard', icon: 'gauge' },
+  { to: '/vehicles', label: 'Veicoli', icon: 'car' },
+  { to: '/drivers', label: 'Drivers', icon: 'users' },
   { to: '/reports', label: 'Reports', icon: 'report' },
   { to: '/about', label: 'About Us', icon: 'info' },
 ]

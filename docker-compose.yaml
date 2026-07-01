@@ -17,12 +17,19 @@ services:
       dockerfile: zenoh_router/subscriber/Dockerfile
     environment:
       ZENOH_ROUTER: tcp/zenoh-router:7447
-      BW_LIMIT_BYTES_S: "1800"   # projected CLOUD B/s that triggers EDGE
+      # default keeps the fleet in CLOUD (live 1 Hz telemetry visible);
+      # lower this (e.g. 1800) or raise MAX_VEHICLES to demo the EDGE switch
+      BW_LIMIT_BYTES_S: "6000"   # projected CLOUD B/s that triggers EDGE
       BW_HYSTERESIS: "0.6"       # return to CLOUD below 60% of the limit
       STATS_INTERVAL_S: "5"
       LOG_LEVEL: INFO
-      # hand off each finished session to the Jakarta report service
-      REPORT_URL: http://fleet-report:8080/report/api/report
+      # ingest each finished trip into the Jakarta stats/registry service
+      INGEST_URL: http://fleet-report:8080/report/api/trips
+      # push the live "who is driving now" + telemetry for the dashboard
+      ACTIVE_URL: http://fleet-report:8080/report/api/active
+      ACTIVE_INTERVAL_S: "2"     # live telemetry push cadence
+      FINE_MIN_SPEEDING_S: "6"   # a multa needs this much speeding in a trip...
+      FINE_CATCH_RATE: "0.3"     # ...and a 30% chance of being caught
     depends_on:
       - zenoh-router
       - fleet-report
@@ -35,12 +42,14 @@ services:
       dockerfile: fleet_simulator/Dockerfile
     environment:
       ZENOH_ROUTER: tcp/zenoh-router:7447
-      START_VEHICLES: "3"
-      MAX_VEHICLES: "15"
-      SPAWN_INTERVAL_S: "2"      # ramp up / refill cadence
-      TRIP_MIN_S: "25"           # each vehicle drives a finite trip, then ends
-      TRIP_MAX_S: "70"           #   its session -> a report streams to Jakarta
-      DURATION_S: "300"          # overall simulation length
+      START_VEHICLES: "6"        # cars in the initial batch
+      MAX_VEHICLES: "15"         # fleet grows to this many cars
+      SPAWN_INTERVAL_S: "2"      # car-growth cadence
+      TRIP_MIN_S: "25"           # each driver drives a finite trip, then ends it
+      TRIP_MAX_S: "70"           #   (-> a trip is ingested into the registry)
+      RECONFIRM_RATE: "0.5"      # chance a free car goes to a returning customer
+      SATISFACTION_RATE: "0.6"   # chance a driver is happy and may come back
+      DURATION_S: "3600"         # overall simulation length (long, for demos)
       LOG_LEVEL: INFO
     depends_on:
       - zenoh-router

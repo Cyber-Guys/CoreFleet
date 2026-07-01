@@ -14,25 +14,50 @@ Accept: application/json
 }
 ###
 
-### Driving report from a session summary (CoreFleet pipeline)
-POST http://localhost:9080/report/api/report
+### Ingest a finished trip (what the fleet server posts; no LLM)
+POST http://localhost:9080/report/api/trips
 Content-Type: application/json
 Accept: application/json
 
 {
-  "vid": "AB123CD",
-  "ended_at": 1782846925.25,
+  "tripId": "demo0001",
+  "endedAt": 1782846925.25,
+  "driver": { "did": "DRV-01", "name": "Marco", "surname": "Rossi",
+              "cf": "RSSMRC00X12Y34Z", "nationality": "Italia" },
+  "vehicle": { "vid": "AB123CD", "odo_km": 42000.0, "fuel_pct": 61.0,
+               "oil_pct": 88.0, "lights": [] },
   "session": {
     "vid": "AB123CD", "dist_km": 0.333, "dur_min": 0.27, "avg_kmh": 75.0,
     "max_kmh": 108.6, "avg_rpm": 2592, "fuel_l": 0.022, "l_per_100km": 6.6,
     "harsh_accel": 2, "harsh_brake": 0, "overrev_s": 0.0, "cold_overrev_s": 0.0,
-    "idle_s": 0.0, "speeding_s": 0.0
+    "idle_s": 0.0, "speeding_s": 12.0
   },
-  "scores": { "safety": 11.1, "eco": 73.6 }
+  "scores": { "safety": 64.0, "eco": 73.6 },
+  "flags": ["harsh_accel", "speeding"]
 }
 ###
 
-### Recent reports (what the dashboard can poll)
+### Who is driving now (live, pushed by the fleet server)
+GET http://localhost:9080/report/api/active
+Accept: application/json
+###
+
+### Vehicle registry
+GET http://localhost:9080/report/api/vehicles
+Accept: application/json
+###
+
+### Driver registry
+GET http://localhost:9080/report/api/drivers
+Accept: application/json
+###
+
+### Generate (or return cached) a driver's report
+POST http://localhost:9080/report/api/drivers/DRV-01/report
+Accept: application/json
+###
+
+### History of generated reports
 GET http://localhost:9080/report/api/report
 Accept: application/json
 ###

@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import signal
 import threading
 import time
@@ -40,14 +41,14 @@ def _env_float(name: str, default: float) -> float:
 
 
 def _bad_behaviours(summary: dict) -> list[str]:
-    """Names of the unsafe/wasteful behaviours present in a trip aggregate."""
+    """Names of the unsafe/wasteful behaviours present in a trip aggregate.
+    Note: 'speeding' (a fine) is added separately — not every moment over the
+    limit becomes a multa."""
     flags = []
     if summary.get("harsh_accel", 0) > 0:
         flags.append("harsh_accel")
     if summary.get("harsh_brake", 0) > 0:
         flags.append("harsh_brake")
-    if summary.get("speeding_s", 0) > 0:
-        flags.append("speeding")
     if summary.get("overrev_s", 0) > 0:
         flags.append("overrev")
     if summary.get("cold_overrev_s", 0) > 0:
@@ -66,16 +67,22 @@ class FleetServer:
         self.bw_low = self.bw_high * _env_float("BW_HYSTERESIS", 0.6)
         self.joules_per_mb = _env_float("JOULES_PER_MB", 1100.0)
         self.stats_interval_s = _env_float("STATS_INTERVAL_S", 5.0)
-        # Jakarta EE / LLM report service. Empty -> hand-off disabled (log only).
-        self.report_url = os.getenv("REPORT_URL", "").strip()
+        # a fine (multa) needs sustained speeding AND being caught — not every
+        # second over the limit is a fine
+        self.fine_min_speeding_s = _env_float("FINE_MIN_SPEEDING_S", 6.0)
+        self.fine_catch_rate = _env_float("FINE_CATCH_RATE", 0.3)
+        # Jakarta stats/registry service. Empty -> ingest disabled (log only).
+        self.ingest_url = os.getenv("INGEST_URL", os.getenv("REPORT_URL", "")).strip()
+        # live "who is driving now" endpoint (defaults next to the ingest one)
+        default_active = self.ingest_url.replace("/trips", "/active") if self.ingest_url else ""
+        self.active_url = os.getenv("ACTIVE_URL", default_active).strip()
+        self.active_interval_s = _env_float("ACTIVE_INTERVAL_S", 2.0)
 
         self._lock = threading.Lock()
         self._active: set[str] = set()
         self._last_pos: dict[str, tuple[float, float]] = {}
+        self._current: dict[str, dict] = {}   # vid -> {did, name} currently driving
         self._mode = P.Mode.CLOUD
-
-        # per-driver trip history, to score behaviour across trips
-        self._drivers: dict[str, list[dict]] = {}
 
         # rolling traffic counters (since last stats tick)
         self._raw_msgs = 0
@@ -115,6 +122,7 @@ class FleetServer:
             else:  # DELETE -> token dropped
                 self._active.discard(vid)
                 self._last_pos.pop(vid, None)
+                self._current.pop(vid, None)
                 log.info("[-] vehicle offline: %s (active=%d)", vid, len(self._active))
 
     # --- telemetry ---
@@ -130,6 +138,17 @@ class FleetServer:
             self._avg_raw_bytes = 0.98 * self._avg_raw_bytes + 0.02 * size
             self._actual_bytes += size
             self._last_pos[data["vid"]] = (data.get("lat"), data.get("lon"))
+            # full live telemetry snapshot (CLOUD, 1 Hz)
+            self._current[data["vid"]] = {
+                "vid": data["vid"], "did": data.get("did"), "name": data.get("driver_name"),
+                "tripId": data.get("trip_id"), "mode": "CLOUD",
+                "speed_kmh": data.get("speed_kmh"), "rpm": data.get("rpm"),
+                "throttle": data.get("throttle"), "load": data.get("load"),
+                "coolant_c": data.get("coolant_c"), "fuel_lph": data.get("fuel_lph"),
+                "limit_kmh": data.get("limit_kmh"),
+                "lat": data.get("lat"), "lon": data.get("lon"),
+                "ts": time.time(),
+            }
 
     def _on_summary(self, sample: "zenoh.Sample") -> None:
         size = len(bytes(sample.payload))
@@ -143,6 +162,14 @@ class FleetServer:
             self._actual_bytes += size
             if data.get("lat") is not None:
                 self._last_pos[data["vid"]] = (data["lat"], data["lon"])
+            # coarser live snapshot in EDGE (window aggregate every 15 s)
+            self._current[data["vid"]] = {
+                "vid": data["vid"], "did": data.get("did"), "name": data.get("driver_name"),
+                "tripId": data.get("trip_id"), "mode": "EDGE",
+                "speed_kmh": data.get("avg_kmh"), "rpm": data.get("avg_rpm"),
+                "lat": data.get("lat"), "lon": data.get("lon"),
+                "ts": time.time(),
+            }
 
     def _on_session(self, sample: "zenoh.Sample") -> None:
         try:
@@ -154,80 +181,50 @@ class FleetServer:
     # --- session report (LLM / Jakarta hand-off) ---
     def _finalize_session(self, summary: dict) -> None:
         scores = self._score(summary)
+        flags = _bad_behaviours(summary)
+        # issue a fine only for sustained speeding that gets caught
+        if (summary.get("speeding_s", 0) > self.fine_min_speeding_s
+                and random.random() < self.fine_catch_rate):
+            flags.append("speeding")
         did = summary.get("did") or "UNKNOWN"
-        with self._lock:
-            history = self._drivers.setdefault(did, [])
-            trend = self._trend(history, scores, summary)
-            history.append({
-                "trip_id": summary.get("trip_id"),
-                "vid": summary.get("vid"),
-                "safety": scores["safety"],
-                "eco": scores["eco"],
-                "flags": _bad_behaviours(summary),
-            })
 
-        report = {
-            "vid": summary.get("vid"),
-            "did": did,
-            "driverName": summary.get("driver_name") or did,
+        # structured trip record for the Jakarta stats/registry service
+        trip = {
             "tripId": summary.get("trip_id"),
-            "ended_at": time.time(),
+            "endedAt": time.time(),
+            "driver": {
+                "did": did,
+                "name": summary.get("driver_name") or did,
+                "surname": summary.get("driver_surname", ""),
+                "cf": summary.get("driver_cf", ""),
+                "nationality": summary.get("driver_nationality", ""),
+            },
+            "vehicle": {
+                "vid": summary.get("vid"),
+                **(summary.get("vehicle") or {}),
+            },
             "session": summary,
             "scores": scores,
-            "trend": trend,
+            "flags": flags,
         }
-        log.info("SESSION REPORT %s", json.dumps(report, separators=(",", ":")))
-        # Hand off to the Jakarta EE / LLM service (best-effort, off the Zenoh thread).
-        if self.report_url:
-            threading.Thread(target=self._post_report, args=(report,), daemon=True).start()
+        log.info("TRIP %s driver=%s vid=%s safety=%s eco=%s",
+                 trip["tripId"], did, summary.get("vid"), scores["safety"], scores["eco"])
+        # Ingest into the Jakarta service (best-effort, off the Zenoh thread).
+        if self.ingest_url:
+            threading.Thread(target=self._post_ingest, args=(trip,), daemon=True).start()
 
-    @staticmethod
-    def _trend(history: list[dict], scores: dict, summary: dict) -> dict:
-        """Compare this trip to the driver's past trips: improved / worsened /
-        stable, plus behaviours that recur across trips (recidivist)."""
-        trip_count = len(history) + 1
-        curr = (scores["safety"] + scores["eco"]) / 2.0
-
-        if not history:
-            return {
-                "tripCount": 1, "verdict": "first_trip",
-                "deltaSafety": None, "deltaEco": None,
-                "prevSafety": None, "prevEco": None, "recidivist": [],
-            }
-
-        prev_safety = sum(h["safety"] for h in history) / len(history)
-        prev_eco = sum(h["eco"] for h in history) / len(history)
-        prev = (prev_safety + prev_eco) / 2.0
-        delta = curr - prev
-        verdict = "improved" if delta > 5 else "worsened" if delta < -5 else "stable"
-
-        curr_flags = _bad_behaviours(summary)
-        recidivist = sorted(
-            f for f in curr_flags
-            if any(f in h["flags"] for h in history)
-        )
-        return {
-            "tripCount": trip_count,
-            "verdict": verdict,
-            "deltaSafety": round(scores["safety"] - prev_safety, 1),
-            "deltaEco": round(scores["eco"] - prev_eco, 1),
-            "prevSafety": round(prev_safety, 1),
-            "prevEco": round(prev_eco, 1),
-            "recidivist": recidivist,
-        }
-
-    def _post_report(self, report: dict) -> None:
-        data = json.dumps(report).encode("utf-8")
+    def _post_ingest(self, trip: dict) -> None:
+        data = json.dumps(trip).encode("utf-8")
         req = urllib.request.Request(
-            self.report_url, data=data,
+            self.ingest_url, data=data,
             headers={"Content-Type": "application/json"}, method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=90) as resp:
-                log.info("report %s posted -> %s %d",
-                         report.get("vid"), self.report_url, resp.status)
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                log.info("trip %s ingested -> %s %d",
+                         trip.get("tripId"), self.ingest_url, resp.status)
         except (urllib.error.URLError, OSError) as exc:
-            log.warning("report hand-off failed (%s): %s", self.report_url, exc)
+            log.warning("trip ingest failed (%s): %s", self.ingest_url, exc)
 
     @staticmethod
     def _score(s: dict) -> dict:
@@ -279,6 +276,28 @@ class FleetServer:
             total_bps, saved_bytes / 1e6, saved_j,
         )
 
+    def _post_active(self) -> None:
+        """Push the current 'who is driving now' map to the Jakarta service."""
+        if not self.active_url:
+            return
+        with self._lock:
+            payload = list(self._current.values())
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            self.active_url, data=data,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        try:
+            urllib.request.urlopen(req, timeout=5).close()
+        except (urllib.error.URLError, OSError) as exc:
+            log.debug("active push failed (%s): %s", self.active_url, exc)
+
+    def _active_loop(self) -> None:
+        """Push live telemetry frequently, independent of the stats cadence."""
+        while not self._stop.is_set():
+            self._post_active()
+            self._stop.wait(self.active_interval_s)
+
     # --- lifecycle ---
     def run(self) -> None:
         signal.signal(signal.SIGINT, lambda *_: self._stop.set())
@@ -297,6 +316,8 @@ class FleetServer:
         ]
         queryable = s.declare_queryable(P.MODE_KEY, self._on_mode_query)
         self._publish_mode()  # announce initial CLOUD mode
+
+        threading.Thread(target=self._active_loop, name="active-push", daemon=True).start()
 
         log.info("server ready: bw_high=%.0f bw_low=%.0f B/s", self.bw_high, self.bw_low)
         last = time.monotonic()

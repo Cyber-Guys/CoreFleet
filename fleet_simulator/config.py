@@ -58,3 +58,10 @@ PROFILES = {
 # Limiti di velocità per tipo di strada (km/h)
 SPEED_LIMITS_KMH = [30, 50, 50, 70, 90, 110, 130]
 
+
+# Consumo asset per visualizzazione (semplificato, non fisico):
+# carburante e olio calano col chilometraggio del trip.
+FUEL_PCT_PER_KM = 8.0     # % serbatoio consumata per km
+OIL_PCT_PER_KM = 1.2      # % olio consumata per km
+OIL_BASE_WEAR = 0.3       # usura olio fissa per trip
+

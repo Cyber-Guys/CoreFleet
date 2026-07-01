@@ -8,10 +8,22 @@ const routes = [
     meta: { title: 'Dashboard' },
   },
   {
+    path: '/vehicles',
+    name: 'vehicles',
+    component: () => import('@/views/VehiclesView.vue'),
+    meta: { title: 'Veicoli' },
+  },
+  {
+    path: '/drivers',
+    name: 'drivers',
+    component: () => import('@/views/DriversView.vue'),
+    meta: { title: 'Conducenti' },
+  },
+  {
     path: '/reports',
     name: 'reports',
     component: () => import('@/views/ReportsView.vue'),
-    meta: { title: 'Driving Reports' },
+    meta: { title: 'Storico Report' },
   },
   {
     path: '/about',

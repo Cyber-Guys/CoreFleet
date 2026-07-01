@@ -1,13 +1,15 @@
 # CoreFleet SDV — Dashboard
 
 Fleet operations console for **CoreFleet SDV**. Vue 3 (Composition API, `<script setup>`),
-vue-router, Chart.js. Cyber/Tech control-room UI: live vehicle count, CLOUD/EDGE
-transmission status, a Cloud-vs-Edge split chart, and a searchable vehicle registry.
+vue-router, Chart.js. Cyber/Tech control-room UI with five tabs: **Dashboard**
+(active count, CLOUD/EDGE status, Cloud-vs-Edge chart, connected vehicles + live
+speed), **Veicoli** (registry + a running trip's live telemetry), **Drivers**
+(registry + "Genera report"), **Reports** (history), **About**.
 
 ## Stack
 
 - **Vue 3** + Vite, `<script setup>` everywhere
-- **vue-router** — Dashboard · Reports · About Us
+- **vue-router** — Dashboard · Veicoli · Drivers · Reports · About
 - **Chart.js** — doughnut (Cloud = orange, Edge = purple)
 - Scoped CSS, design tokens in `src/assets/styles/theme.css`
 - Type: Chakra Petch (display) · Inter (body) · JetBrains Mono (plates/telemetry)
@@ -37,43 +39,46 @@ starts the Zenoh router, fleet server and simulator. The dashboard is served at
 src/
 ├── main.js                 # app bootstrap
 ├── App.vue                 # shell: sidebar + topbar (search) + router-view
-├── router/index.js         # Dashboard / Reports / About routes
+├── router/index.js         # Dashboard / Veicoli / Drivers / Reports / About routes
 ├── assets/styles/theme.css # design tokens, base, shared glow/pulse keyframes
-├── data/mockData.js        # mock snapshot (mirrors the server's data shape)
-├── services/fleetApi.js    # data seam — mock now, Zenoh REST later
-├── composables/useFleet.js # singleton store: state, search filter, live ticker
+├── data/mockData.js        # mock snapshot for the Dashboard KPI widgets
+├── services/fleetApi.js    # API client: getActive/getVehicles/getDrivers/getReports/…
+├── composables/useFleet.js # singleton store: mock KPIs + shared search query
 ├── components/
 │   ├── AppSidebar.vue
 │   ├── AppSearchBar.vue
+│   ├── DriverReportCard.vue # renders a generated DriverReport (Drivers + Reports)
 │   ├── ui/                 # BaseWidget, StatusDot, AppIcon
-│   └── widgets/            # ActiveVehicles, Status, ModeChart, VehicleList
-└── views/                  # DashboardView, ReportsView, AboutView
+│   └── widgets/            # ActiveVehicles, Status, ModeChart, VehicleList (live)
+└── views/                  # DashboardView, VehiclesView, DriversView, ReportsView, AboutView
 ```
 
-## Data: mock → live
+## Data sources
 
-All data flows through `src/services/fleetApi.js`. Today `getSnapshot()` returns
-mock data; the shape matches the fleet server (`vid`, `mode`, `profile`, `eco`,
-`safety`, `lat`, `lon`). To go live:
+- The **Dashboard** headline widgets (active count, CLOUD/EDGE status, Cloud-vs-Edge
+  chart) run on a **mock store** (`useFleet` / `mockData.js`) for a lively feel.
+- Everything else is **live** from the Jakarta service (`VITE_REPORT_API_URL`,
+  default `http://localhost:9080`): connected vehicles + live telemetry
+  (`/report/api/active`), registries (`/vehicles`, `/drivers`), on-demand reports
+  (`/drivers/{did}/report`) and history (`/report`).
 
-1. Set `VITE_USE_MOCK=false` and `VITE_FLEET_API_URL` (e.g. `/fleet-api` to use the
-   bundled nginx proxy to the Zenoh router's REST API on `:8000`).
-2. Implement `adaptZenoh()` to map `core/fleet/**` samples into the snapshot shape.
+In Docker set `VITE_REPORT_API_URL=/report-api` to use the bundled nginx proxy.
+`fleetApi.getSnapshot()` still has a stubbed `adaptZenoh()` for reading live fleet
+state straight from the Zenoh router REST — an optional future path.
 
-No component changes are needed — they only read the store.
+## Navigation & search
 
-## Search
-
-The topbar search filters the vehicle registry by **plate (targa)** or **driver
-profile**, case-insensitive. With no match it shows **“Nessun risultato trovato.”**
+Detail selection is URL-addressable (`/vehicles?vid=…`, `/drivers?did=…`), so the
+tabs cross-link: a vehicle's recent drivers → that driver, a driver's cars used →
+that vehicle, a Dashboard row → that vehicle. The topbar search filters the current
+tab (plate / driver name / id); no match shows **“Nessun risultato trovato.”**
 
 ## Accessibility / quality floor
 
-Responsive to mobile (sidebar collapses to an icon rail), visible keyboard focus
-on the search field, `prefers-reduced-motion` respected, semantic landmarks.
+Responsive to mobile (sidebar collapses to an icon rail), visible keyboard focus,
+`prefers-reduced-motion` respected, semantic landmarks.
 
 ## Next
 
-- Live map (Leaflet/MapLibre) from `lat`/`lon` — the data is already in the store.
-- Wire `adaptZenoh()` to the router REST endpoint.
-- Surface the server's bandwidth/energy-saved stats as a KPI strip.
+- Live map (Leaflet/MapLibre) from the `lat`/`lon` in `/report/api/active`.
+- Persist registries/reports (currently in-memory in the service).

@@ -30,12 +30,32 @@ from .vehicle_simulator import VehicleSimulator
 
 log = logging.getLogger(__name__)
 
-# a small roster of names so reports read like people, not ids
+# small rosters so drivers read like people, not ids
 _NAMES = [
     "Marco", "Giulia", "Luca", "Sara", "Paolo", "Elena", "Davide", "Chiara",
     "Andrea", "Federica", "Matteo", "Alessia", "Simone", "Martina", "Roberto",
     "Valentina", "Stefano", "Ilaria", "Francesco", "Beatrice",
 ]
+_SURNAMES = [
+    "Rossi", "Russo", "Ferrari", "Esposito", "Bianchi", "Romano", "Colombo",
+    "Ricci", "Marino", "Greco", "Bruno", "Gallo", "Conti", "De Luca", "Mancini",
+    "Costa", "Giordano", "Rizzo", "Lombardi", "Moretti",
+]
+_NATIONALITIES = [
+    "Italia", "Italia", "Italia", "Italia", "Romania", "Albania",
+    "Marocco", "Germania", "Francia", "Spagna",
+]
+_CF_CONS = "BCDFGHJKLMNPRSTVWXYZ"
+
+
+def _fake_cf(name: str, surname: str) -> str:
+    """A plausible-looking (not valid) codice fiscale."""
+    def trip3(s):
+        cons = [c for c in s.upper() if c in _CF_CONS]
+        return "".join((cons + ["X", "X", "X"])[:3])
+    digits = "".join(random.choices("0123456789", k=2))
+    tail = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+    return f"{trip3(surname)}{trip3(name)}{digits}{tail}"
 
 
 @dataclass
@@ -43,6 +63,9 @@ class Car:
     vid: str
     lat: float
     lon: float
+    odo_km: float = 0.0
+    fuel_pct: float = 100.0
+    oil_pct: float = 100.0
     in_use: bool = False
 
 
@@ -69,43 +92,66 @@ class FleetSimulator:
         router: str,
         start_cars: int,
         max_cars: int,
-        num_drivers: int,
         profiles: list,
         duration_s: int,
         spawn_interval_s: float = 2.0,
         trip_min_s: float = 25.0,
         trip_max_s: float = 70.0,
+        reconfirm_rate: float = 0.5,
+        satisfaction_rate: float = 0.6,
     ):
         self.router = router
         self.start_cars = start_cars
         self.max_cars = max_cars
-        self.num_drivers = num_drivers
         self.profiles = list(profiles)
         self.duration_s = duration_s
         self.spawn_interval_s = spawn_interval_s
         self.trip_min_s = trip_min_s
         self.trip_max_s = trip_max_s
+        # chance a free car goes to a returning (satisfied) customer vs a new one
+        self.reconfirm_rate = reconfirm_rate
+        # chance a driver is happy with the trip and may come back
+        self.satisfaction_rate = satisfaction_rate
 
         self.cars: list[Car] = []
-        self.drivers: list[Driver] = []
-        self.idle_drivers: set[str] = set()
+        self.drivers: dict[str, Driver] = {}    # registry of everyone who drove (grows)
+        self.idle_returning: set[str] = set()   # satisfied drivers available to reconfirm
         self.busy_cars: dict[str, Car] = {}     # trip_id -> car
         self.busy_drivers: dict[str, str] = {}  # trip_id -> did
+        self.last_car: dict[str, str] = {}      # did -> last vid driven
         self.agents: list[VehicleAgent] = []
 
         self._used_vids: set[str] = set()
+        self._driver_seq = 0
         self._stop = threading.Event()
 
     # --- pools --------------------------------------------------------------
-    def _build_drivers(self) -> None:
-        names = random.sample(_NAMES, min(self.num_drivers, len(_NAMES)))
-        for i in range(self.num_drivers):
-            did = f"DRV-{i + 1:02d}"
-            name = names[i] if i < len(names) else f"Driver{i + 1}"
-            profile = PROFILES[random.choice(self.profiles)]
-            self.drivers.append(Driver(did=did, name=name, profile=profile))
-            self.idle_drivers.add(did)
-        log.info("driver pool: %d drivers", len(self.drivers))
+    def _new_driver(self) -> Driver:
+        """Mint a brand-new customer and add them to the registry."""
+        self._driver_seq += 1
+        did = f"DRV-{self._driver_seq:03d}"
+        name = random.choice(_NAMES)
+        surname = random.choice(_SURNAMES)
+        driver = Driver(
+            did=did, name=name, surname=surname,
+            cf=_fake_cf(name, surname),
+            nationality=random.choice(_NATIONALITIES),
+            profile=PROFILES[random.choice(self.profiles)],
+        )
+        self.drivers[did] = driver
+        return driver
+
+    def _pick_driver(self, exclude_last_vid: str | None = None) -> Driver:
+        """A returning satisfied customer (sometimes) or a new one. A returning
+        driver is only reused if they did NOT last drive `exclude_last_vid`, so a
+        car is never immediately handed back to the driver who just dropped it."""
+        if self.idle_returning and random.random() < self.reconfirm_rate:
+            cands = [d for d in self.idle_returning if self.last_car.get(d) != exclude_last_vid]
+            if cands:
+                did = random.choice(cands)
+                self.idle_returning.discard(did)
+                return self.drivers[did]
+        return self._new_driver()
 
     def add_car(self) -> None:
         if len(self.cars) >= self.max_cars:
@@ -115,7 +161,12 @@ class FleetSimulator:
             vid = self._generate_vehicle_id()
         self._used_vids.add(vid)
         lat, lon = random.uniform(39.1, 39.3), random.uniform(9.0, 9.2)
-        self.cars.append(Car(vid=vid, lat=lat, lon=lon))
+        self.cars.append(Car(
+            vid=vid, lat=lat, lon=lon,
+            odo_km=round(random.uniform(5_000, 90_000), 1),
+            fuel_pct=round(random.uniform(35, 100), 1),
+            oil_pct=round(random.uniform(60, 100), 1),
+        ))
         log.info("added car %s [%d/%d]", vid, len(self.cars), self.max_cars)
 
     def _generate_vehicle_id(self) -> str:
@@ -126,17 +177,16 @@ class FleetSimulator:
         )
 
     # --- trips --------------------------------------------------------------
-    def _driver(self, did: str) -> Driver:
-        return next(d for d in self.drivers if d.did == did)
-
     def _start_trip(self) -> None:
         free_cars = [c for c in self.cars if not c.in_use]
-        if not self.idle_drivers or not free_cars:
+        if not free_cars:
             return
 
-        did = random.choice(list(self.idle_drivers))
+        # pick the car first, then a driver who didn't just drive it
         car = random.choice(free_cars)
-        driver = self._driver(did)
+        driver = self._pick_driver(exclude_last_vid=car.vid)
+        did = driver.did
+        self.last_car[did] = car.vid
         trip_id = uuid.uuid4().hex[:8]
 
         sim = VehicleSimulator(
@@ -145,17 +195,23 @@ class FleetSimulator:
             profile=_jitter_profile(driver.profile),
             did=driver.did,
             driver_name=driver.name,
+            driver_surname=driver.surname,
+            driver_cf=driver.cf,
+            driver_nationality=driver.nationality,
             trip_id=trip_id,
+            odo_km=car.odo_km,
+            fuel_pct=car.fuel_pct,
+            oil_pct=car.oil_pct,
         )
         agent = VehicleAgent(sim, self.router, trip_s=random.uniform(self.trip_min_s, self.trip_max_s))
 
-        self.idle_drivers.discard(did)
         car.in_use = True
         self.busy_cars[trip_id] = car
         self.busy_drivers[trip_id] = did
         self.agents.append(agent)
         agent.start()
-        log.info("trip %s: %s (%s) drives %s", trip_id, driver.name, did, car.vid)
+        log.info("trip %s: %s %s (%s) drives %s [%d drivers seen]",
+                 trip_id, driver.name, driver.surname, did, car.vid, len(self.drivers))
 
     def _reap(self) -> None:
         """Return cars and drivers from finished trips to their pools."""
@@ -163,26 +219,44 @@ class FleetSimulator:
             agent.join(timeout=0.1)
             tid = agent.trip_id
             car = self.busy_cars.pop(tid, None)
+            bad_experience = False
             if car is not None:
-                # the car stays where the trip left it
+                snap = agent.sim.vehicle_snapshot()
+                bad_experience = bool(snap["lights"])
+                # the car keeps its mileage/levels and stays where it was left
                 car.lat, car.lon = agent.sim.st.lat, agent.sim.st.lon
+                car.odo_km = snap["odo_km"]
+                car.fuel_pct = snap["fuel_pct"]
+                car.oil_pct = snap["oil_pct"]
+                # depot service: refuel / top up oil when low
+                if car.fuel_pct < 20:
+                    car.fuel_pct = 100.0
+                    log.info("car %s refuelled at depot", car.vid)
+                if car.oil_pct < 25:
+                    car.oil_pct = 100.0
+                    log.info("car %s oil serviced at depot", car.vid)
                 car.in_use = False
+
             did = self.busy_drivers.pop(tid, None)
             if did is not None:
-                self.idle_drivers.add(did)
+                # satisfied customers may come back; a bad car experience (warning
+                # lights at hand-back) makes them less likely to reconfirm
+                chance = self.satisfaction_rate * (0.5 if bad_experience else 1.0)
+                if random.random() < chance:
+                    self.idle_returning.add(did)
             self.agents.remove(agent)
 
     # --- lifecycle ----------------------------------------------------------
     def run(self) -> None:
         log.info(
-            "fleet starting: %d->%d cars, %d drivers, %ss, router=%s",
-            self.start_cars, self.max_cars, self.num_drivers, self.duration_s, self.router,
+            "fleet starting: %d->%d cars, reconfirm=%.0f%% satisfaction=%.0f%%, %ss, router=%s",
+            self.start_cars, self.max_cars, self.reconfirm_rate * 100,
+            self.satisfaction_rate * 100, self.duration_s, self.router,
         )
 
         signal.signal(signal.SIGINT, self._on_signal)
         signal.signal(signal.SIGTERM, self._on_signal)
 
-        self._build_drivers()
         for _ in range(self.start_cars):
             self.add_car()
 
@@ -200,8 +274,8 @@ class FleetSimulator:
                 self.add_car()
                 last_car_add = now
 
-            # keep every available car on the road while drivers are free
-            while self.idle_drivers and any(not c.in_use for c in self.cars):
+            # every free car gets a driver — a returning customer or a new one
+            while any(not c.in_use for c in self.cars):
                 self._start_trip()
 
             self._stop.wait(0.5)
@@ -238,24 +312,27 @@ def main() -> None:
     log.info("using seed %s", seed)
 
     router = os.getenv("ZENOH_ROUTER", "tcp/localhost:7447")
-    start_cars = _env_int("START_VEHICLES", 3)
+    start_cars = _env_int("START_VEHICLES", 6)
     max_cars = _env_int("MAX_VEHICLES", 15)
-    num_drivers = _env_int("NUM_DRIVERS", max_cars)
     duration_s = _env_int("DURATION_S", 300)
     spawn_interval = float(os.getenv("SPAWN_INTERVAL_S", "2"))
     trip_min = float(os.getenv("TRIP_MIN_S", "25"))
     trip_max = float(os.getenv("TRIP_MAX_S", "70"))
+    # new customers arrive continuously; satisfied ones may reconfirm
+    reconfirm_rate = float(os.getenv("RECONFIRM_RATE", "0.5"))
+    satisfaction_rate = float(os.getenv("SATISFACTION_RATE", "0.6"))
 
     sim = FleetSimulator(
         router=router,
         start_cars=start_cars,
         max_cars=max_cars,
-        num_drivers=num_drivers,
         profiles=list(PROFILES.keys()),
         duration_s=duration_s,
         spawn_interval_s=spawn_interval,
         trip_min_s=trip_min,
         trip_max_s=trip_max,
+        reconfirm_rate=reconfirm_rate,
+        satisfaction_rate=satisfaction_rate,
     )
     sim.run()
 

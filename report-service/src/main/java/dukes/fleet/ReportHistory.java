@@ -1,7 +1,7 @@
 /********************************************************************************
  * CoreFleet SDV — based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
-package dukes.report;
+package dukes.fleet;
 
 import java.util.ArrayList;
 import java.util.Deque;
@@ -10,21 +10,19 @@ import java.util.concurrent.ConcurrentLinkedDeque;
 
 import jakarta.enterprise.context.ApplicationScoped;
 
-/** Bounded in-memory history of generated reports (newest first). */
+/** Bounded history of generated driver reports (newest first). */
 @ApplicationScoped
-public class ReportStore {
+public class ReportHistory {
 
-    private static final int MAX = 50;
-    private final Deque<DrivingReport> reports = new ConcurrentLinkedDeque<>();
+    private static final int MAX = 100;
+    private final Deque<DriverReport> reports = new ConcurrentLinkedDeque<>();
 
-    public void add(DrivingReport report) {
+    public void add(DriverReport report) {
         reports.addFirst(report);
-        while (reports.size() > MAX) {
-            reports.pollLast();
-        }
+        while (reports.size() > MAX) reports.pollLast();
     }
 
-    public List<DrivingReport> recent() {
+    public List<DriverReport> recent() {
         return new ArrayList<>(reports);
     }
 }
