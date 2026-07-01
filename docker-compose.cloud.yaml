@@ -1,0 +1,81 @@
+services:
+  fleet-server:
+    build:
+      context: .
+      dockerfile: zenoh_router/subscriber/Dockerfile
+    environment:
+      ZENOH_CONFIG_FILE: /app/corefleet/config.json
+      # channel capacity: keep vehicles in CLOUD up to CLOUD_SATURATION of it,
+      # then offload the overflow (newest vehicles) to EDGE -> a hybrid mix
+      BW_LIMIT_BYTES_S: ${BW_LIMIT_BYTES_S:-3000}   # channel capacity (B/s)
+      CLOUD_SATURATION: ${CLOUD_SATURATION:-0.8}    # % of capacity to fill with CLOUD
+      STATS_INTERVAL_S: "5"
+      LOG_LEVEL: INFO
+      # ingest each finished trip into the Jakarta stats/registry service
+      INGEST_URL: ${INGEST_URL:-http://fleet-report:8080/report/api/trips}
+      # push the live "who is driving now" + telemetry for the dashboard
+      ACTIVE_URL: ${ACTIVE_URL:-http://fleet-report:8080/report/api/active}
+      ACTIVE_INTERVAL_S: "2"     # live telemetry push cadence
+      FINE_MIN_SPEEDING_S: "6"   # a multa needs this much speeding in a trip...
+      FINE_CATCH_RATE: "0.3"     # ...and a 30% chance of being caught
+    depends_on:
+      - fleet-report
+    networks:
+      - corefleet
+
+  fleet-simulator:
+    build:
+      context: .
+      dockerfile: fleet_simulator/Dockerfile
+    environment:
+      ZENOH_CONFIG_FILE: /app/corefleet/config.json
+      START_VEHICLES: "6"        # cars in the initial batch
+      MAX_VEHICLES: ${MAX_VEHICLES:-15}   # fleet grows to this many cars
+      SPAWN_INTERVAL_S: "2"      # car-growth cadence
+      TRIP_MIN_S: "25"           # each driver drives a finite trip, then ends it
+      TRIP_MAX_S: "70"           #   (-> a trip is ingested into the registry)
+      RECONFIRM_RATE: "0.5"      # chance a free car goes to a returning customer
+      SATISFACTION_RATE: "0.6"   # chance a driver is happy and may come back
+      DEMAND_PERIOD_S: "120"     # traffic rush/quiet cycle -> drives CLOUD<->EDGE
+      DEMAND_MIN: "0.2"          # at the quietest, ~20% of the fleet is out
+      DURATION_S: "3600"         # overall simulation length (long, for demos)
+      LOG_LEVEL: INFO
+    depends_on:
+      - fleet-server
+    networks:
+      - corefleet
+
+  fleet-report:
+    build:
+      context: ./report-service
+      dockerfile: Dockerfile
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}          # from gitignored .env
+      OPENAI_MODEL_NAME: ${OPENAI_MODEL_NAME:-gpt-4o-mini}
+      OPENAI_IMAGE_MODEL: ${OPENAI_IMAGE_MODEL:-gpt-5-mini}   # Responses image_generation tool
+    ports:
+      - "9080:8080"       # Jakarta EE report service (Open Liberty)
+    networks:
+      - corefleet
+
+  fleet-webapp:
+    build:
+      context: ./webapp
+      dockerfile: Dockerfile
+      args:
+        # browser uses the same-origin nginx proxy; no backend host baked in
+        VITE_REPORT_API_URL: ${VITE_REPORT_API_URL:-/report-api}
+    environment:
+      ZENOH_CONFIG_FILE: /app/corefleet/config.json
+      # nginx reverse-proxy upstreams (override with IPs for a split deployment)
+      REPORT_SERVICE_URL: ${REPORT_SERVICE_URL:-http://fleet-report:8080}
+    ports:
+      - "8080:80"         # dashboard UI at http://localhost:8080
+    depends_on:
+      - fleet-report
+    networks:
+      - corefleet
+
+networks:
+  corefleet:
+    name: corefleet

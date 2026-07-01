@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 from typing import Callable, Optional
 
@@ -26,11 +27,20 @@ from . import protocol as P
 log = logging.getLogger(__name__)
 
 
-def build_client_config(router: str) -> zenoh.Config:
-    """Zenoh client config connecting to a single router, no multicast scouting."""
+def build_client_config(router: str | None = None) -> zenoh.Config:
+    """Build a Zenoh client config.
+
+    If ``ZENOH_CONFIG_FILE`` is set, load that full config file first. Otherwise
+    fall back to a minimal client config that connects to ``router`` and skips
+    multicast scouting.
+    """
+    config_file = os.getenv("ZENOH_CONFIG_FILE", "").strip()
+    if config_file:
+        return zenoh.Config.from_file(config_file)
+
     config = zenoh.Config()
     config.insert_json5("mode", json.dumps("client"))
-    config.insert_json5("connect/endpoints", json.dumps([router]))
+    config.insert_json5("connect/endpoints", json.dumps([router or os.getenv("ZENOH_ROUTER", "tcp/localhost:7447")]))
     config.insert_json5("scouting/multicast/enabled", json.dumps(False))
     return config
 
