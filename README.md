@@ -157,6 +157,8 @@ The final `session` payload additionally carries the driver's anagrafica (`drive
 
 These counters are derived from physically-grounded thresholds (see `fleet_simulator/config.py`) so the downstream scores rest on real signals rather than on the LLM inventing numbers. Speeding still lowers the safety score, but a **multa** (fine) is only recorded for *sustained* speeding that gets *caught* (`FINE_MIN_SPEEDING_S`, `FINE_CATCH_RATE`).
 
+**Where the features are computed** — this is the concrete cloud-vs-edge trade-off. In **CLOUD** the device ships raw 1 Hz telemetry and the **server** derives every feature itself (`corefleet/aggregate.py` → `ServerTripAggregator`), including acceleration as `Δspeed/Δt` for harsh-event detection. In **EDGE** the device computes the features on-board and the server just **folds** the window aggregates in. Either way the server owns one complete per-trip aggregate and scores *that* — so the trip score is authoritative regardless of mode; only the *location of the computation* (and the bytes on the wire) changes. Each trip records its provenance (`stats_by`: `server-cloud` / `server-mixed` / `edge`). Deriving from a 1 Hz feed is coarser than the device's full-rate signal, so cloud-side harsh counts can slightly under-count sub-second spikes — the honest fidelity cost of moving computation off the edge.
+
 ---
 
 ## 7. Cars, Drivers & Trips

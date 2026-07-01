@@ -5,11 +5,17 @@ Responsibilities
 ----------------
 * Track presence via liveliness tokens (``core/fleet/*/alive``).
 * Ingest telemetry: ``raw`` (CLOUD, 1 Hz) and ``summary`` (EDGE windows).
-* Decide the fleet transmission mode from the projected CLOUD bandwidth, with
-  hysteresis, and broadcast it on ``core/fleet/mode`` (also answered via a
-  queryable so late-joining vehicles can read the current mode on boot).
+* Derive each trip's driving features *server-side* from the CLOUD raw stream
+  (:class:`~corefleet.aggregate.ServerTripAggregator`); EDGE windows are folded
+  in so the aggregate stays complete across mode switches. The cloud does the
+  work in CLOUD, the device does it in EDGE — same numbers, different location.
+* Assign a per-vehicle transmission mode so the fleet runs a hybrid mix: keep
+  vehicles in CLOUD up to ``CLOUD_SATURATION`` of the channel, offload the
+  overflow (newest first) to EDGE. Published on ``core/fleet/{vid}/mode`` and
+  answered via a queryable so a late-joining vehicle reads its mode on boot.
 * Finalize a driving session when its full-session aggregate arrives on
-  ``core/fleet/*/session`` and emit the report payload (LLM/Jakarta hand-off).
+  ``core/fleet/*/session`` and emit the report payload (LLM/Jakarta hand-off),
+  scoring the server-owned aggregate rather than trusting the client's numbers.
 * Report bandwidth and estimated transmission energy saved vs an all-CLOUD
   baseline -- the headline Challenge 1 metric.
 """
@@ -28,6 +34,7 @@ import urllib.request
 import zenoh
 
 from corefleet import protocol as P
+from corefleet.aggregate import FEATURE_KEYS, ServerTripAggregator
 from corefleet.client import build_client_config
 
 log = logging.getLogger(__name__)
@@ -91,6 +98,9 @@ class FleetServer:
         self._vmode: dict[str, P.Mode] = {}   # vid -> assigned transmission mode
         self._join_seq: dict[str, int] = {}   # vid -> join order (CLOUD priority)
         self._seq = 0
+        # per-vehicle server-side trip aggregator (derives features from raw in
+        # CLOUD; folds EDGE window summaries) -> authoritative trip stats
+        self._trip_agg: dict[str, ServerTripAggregator] = {}
 
         # rolling traffic counters (since last stats tick)
         self._raw_msgs = 0
@@ -137,7 +147,18 @@ class FleetServer:
                 self._current.pop(vid, None)
                 self._vmode.pop(vid, None)
                 self._join_seq.pop(vid, None)
+                self._trip_agg.pop(vid, None)
                 log.info("[-] vehicle offline: %s (active=%d)", vid, len(self._active))
+
+    # --- server-side trip aggregation ---
+    def _agg_for(self, vid: str, tid) -> ServerTripAggregator:
+        """This vehicle's trip aggregator, restarted on a new trip_id.
+        Caller must hold ``self._lock``."""
+        agg = self._trip_agg.get(vid)
+        if agg is None or agg.trip_id != tid:
+            agg = ServerTripAggregator(tid)
+            self._trip_agg[vid] = agg
+        return agg
 
     # --- telemetry ---
     def _on_raw(self, sample: "zenoh.Sample") -> None:
@@ -152,6 +173,8 @@ class FleetServer:
             self._avg_raw_bytes = 0.98 * self._avg_raw_bytes + 0.02 * size
             self._actual_bytes += size
             self._last_pos[data["vid"]] = (data.get("lat"), data.get("lon"))
+            # derive this trip's features server-side from the raw 1 Hz stream
+            self._agg_for(data["vid"], data.get("trip_id")).add_raw(data)
             # full live telemetry snapshot (CLOUD, 1 Hz)
             self._current[data["vid"]] = {
                 "vid": data["vid"], "did": data.get("did"), "name": _full_name(data),
@@ -177,6 +200,8 @@ class FleetServer:
             self._actual_bytes += size
             if data.get("lat") is not None:
                 self._last_pos[data["vid"]] = (data["lat"], data["lon"])
+            # fold the edge-computed window into the server's trip aggregate
+            self._agg_for(data["vid"], data.get("trip_id")).fold_summary(data)
             # coarser live snapshot in EDGE (window aggregate every 15 s)
             self._current[data["vid"]] = {
                 "vid": data["vid"], "did": data.get("did"), "name": _full_name(data),
@@ -196,6 +221,18 @@ class FleetServer:
 
     # --- session report (LLM / Jakarta hand-off) ---
     def _finalize_session(self, summary: dict) -> None:
+        # Prefer the server's own aggregate (features derived from raw in CLOUD,
+        # folded from windows in EDGE) over the client's numbers. Fall back to the
+        # client session only if the server saw no telemetry for this trip.
+        vid = summary.get("vid")
+        with self._lock:
+            agg = self._trip_agg.pop(vid, None)
+        if agg is not None and agg.has_data and agg.trip_id == summary.get("trip_id"):
+            summary.update(agg.result())
+            summary["stats_by"] = agg.provenance()
+        else:
+            summary["stats_by"] = "edge"
+
         scores = self._score(summary)
         flags = _bad_behaviours(summary)
         # issue a fine only for sustained speeding that gets caught
@@ -223,8 +260,9 @@ class FleetServer:
             "scores": scores,
             "flags": flags,
         }
-        log.info("TRIP %s driver=%s vid=%s safety=%s eco=%s",
-                 trip["tripId"], did, summary.get("vid"), scores["safety"], scores["eco"])
+        log.info("TRIP %s driver=%s vid=%s safety=%s eco=%s stats=%s",
+                 trip["tripId"], did, summary.get("vid"), scores["safety"], scores["eco"],
+                 summary.get("stats_by"))
         # Ingest into the Jakarta service (best-effort, off the Zenoh thread).
         if self.ingest_url:
             threading.Thread(target=self._post_ingest, args=(trip,), daemon=True).start()
