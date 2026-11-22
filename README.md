@@ -4,7 +4,8 @@
 
 <p align="center">
   <b>Fleet telemetry that moves between cloud and edge processing over Eclipse Zenoh, with driver reports written by an LLM.</b><br>
-  <sub>CEI-Sphere Hackathon "Code the Continuum" · Cagliari · Challenge 1 + Challenge 3 · built 30 June and 1 July 2026 by team CyberGuys</sub>
+  <sub>CEI-Sphere Hackathon "Code the Continuum" · Cagliari · Challenge 1 + Challenge 3 · built 30 June and 1 July 2026 by team CyberGuys</sub><br>
+  <a href="docs/presentation/CoreFleet_Presentation.pdf">Presentation slides (PDF)</a>
 </p>
 
 <p align="center">
@@ -27,6 +28,11 @@
 CoreFleet was built in two days at **Code the Continuum**, the CEI-Sphere hackathon held at the University of Cagliari on 30 June and 1 July 2026 and organised by CEI-Sphere, O-CEI and COP-PILOT. The event was about the cloud-edge-IoT continuum.
 
 We answered two challenges with one product: **Challenge 1** (Eclipse Zenoh and sustainable edge-cloud) and **Challenge 3** (Jakarta EE, AI and the Hourglass Model). CoreFleet won **1st place in Challenge 1** (€750) and **3rd place in Challenge 3** (€300). The briefs are in [The hackathon](#the-hackathon).
+
+<p align="center">
+  <img src="docs/assets/code-the-continuum-official.jpg" width="100%" alt="Official banner of Code the Continuum, CEI-Sphere hackathon with O-CEI and COP-PILOT, University of Cagliari, 30 June to 1 July 2026">
+  <br><sub>The official banner of the event, by CEI-Sphere.</sub>
+</p>
 
 ## Team
 
@@ -51,6 +57,11 @@ When the channel fills up, the server moves the newest cars to EDGE. The fleet e
 
 Everything runs in Docker with one command, and the services can also be split across several machines.
 
+<p align="center">
+  <img src="docs/assets/screenshots/dashboard.png" width="100%" alt="CoreFleet dashboard: 14 of 15 vehicles on the road, CLOUD status, Cloud vs Edge doughnut and connected vehicles">
+  <br><sub>The dashboard during the demo: 14 cars on the road, 9 in CLOUD and 5 in EDGE.</sub>
+</p>
+
 ## Contents
 
 - [The hackathon](#the-hackathon)
@@ -63,6 +74,7 @@ Everything runs in Docker with one command, and the services can also be split a
 - [Repository layout](#repository-layout)
 - [Getting started](#getting-started)
 - [Roadmap](#roadmap)
+- [Presentation](#presentation)
 - [License](#license)
 
 ## The hackathon
@@ -164,6 +176,11 @@ flowchart LR
 
 The server subscribes with wildcards (`core/fleet/*/raw`, `core/fleet/*/summary`, `core/fleet/*/session`, `core/fleet/*/alive`), so it needs no per-vehicle subscriptions. The end-of-trip ingest runs on the `session` payload, so it does not depend on the order of liveliness events.
 
+<p align="center">
+  <img src="docs/assets/screenshots/zenoh-cloud-clients.png" width="60%" alt="ZettaScale Cloud console: 29 Zenoh clients connected to the CoreFleet router">
+  <br><sub>The Zenoh router on ZettaScale Cloud during the demo, with 29 clients connected.</sub>
+</p>
+
 Every payload carries the driver (`did`, `driver_name`) and the trip id (`trip_id`). The final `session` payload also carries the driver's personal data (`driver_surname`, `driver_cf`, `driver_nationality`) and a `vehicle` snapshot (`odo_km`, `fuel_pct`, `oil_pct`, `lights`). The registries are built from these fields.
 
 Design notes:
@@ -191,6 +208,12 @@ The channel fills to `CLOUD_SATURATION` (default `0.8`, so 80%) of `BW_LIMIT_BYT
 Example with `BW_LIMIT_BYTES_S=3000`, `CLOUD_SATURATION=0.8` and `avg_raw≈248 B`: up to about 9 vehicles stay in CLOUD, so with 15 active cars the split is 9 CLOUD and 6 EDGE, logged as `MODE reassign: 9 cloud + 6 edge (max_cloud=9, avg_raw=248B)`.
 
 Energy saved is estimated as `bytes_saved / 1e6 × JOULES_PER_MB` against a fleet that is all CLOUD. This is the main number for the Challenge 1 comparison. The server prints it every `STATS_INTERVAL_S` seconds in a `[stats] cloud=… edge=… active=…` line. `BW_LIMIT_BYTES_S`, `CLOUD_SATURATION` and `JOULES_PER_MB` are environment variables.
+
+<p align="center">
+  <img src="docs/assets/screenshots/slide-cloud-vs-edge.jpg" width="49%" alt="Slide: CLOUD sends 1 Hz raw telemetry, EDGE sends 15 s aggregates">
+  <img src="docs/assets/screenshots/slide-dynamic-switch.jpg" width="49%" alt="Slide: the server measures load, detects congestion and moves new vehicles to EDGE">
+  <br><sub>From the presentation: the two modes, and how the server moves vehicles between them.</sub>
+</p>
 
 Each trip keeps two aggregates:
 
@@ -258,6 +281,11 @@ The platform computes the numbers: scores, counts, repeat behaviours, trend and 
 
 Next to the report, the service generates an image for each driver with the `image_generation` tool of the OpenAI Responses API (`OPENAI_IMAGE_MODEL`, default `gpt-5-mini`). It takes 30 to 60 seconds, so `POST …/report` returns the text at once and runs the image on a background executor. The dashboard shows a spinner and polls `…/report/image` until it gets `status: ready` with a `data:image/png;base64,…` URL. The call uses a plain `HttpClient` forced to HTTP/1.1, because HTTP/2 hangs on OpenJ9. Asking twice for the same driver does not start a second job.
 
+<p align="center">
+  <img src="docs/assets/screenshots/hourglass-report.jpg" width="50%" alt="Hourglass Model image generated for a driver: stakeholders on top, KPIs in the waist, OBD2, GPS and IMU signals at the bottom">
+  <br><sub>An Hourglass image generated by the report service: stakeholders on top, the eco and safety KPIs in the waist, the raw signals at the bottom.</sub>
+</p>
+
 The OpenAI key comes from the `OPENAI_API_KEY` environment variable, set in a `.env` file that git ignores. See `report-service/README.md`.
 
 ## Repository layout
@@ -285,6 +313,7 @@ The OpenAI key comes from the `OPENAI_API_KEY` environment variable, set in a `.
 │   ├── src/main/java/dukes/    # fleet/ (registries, reports) + hourglass/ + ai/
 │   └── Dockerfile              # Maven build -> Open Liberty (Java 17)
 ├── webapp/                     # Vue 3 dashboard (Dashboard/Vehicles/Drivers/Network/Reports)
+├── docs/                       # presentation slides, banners, screenshots, team cards
 ├── docker-compose.yaml         # Full stack: router + server + sim + report + webapp
 ├── .env.example                # OPENAI_API_KEY lives in a gitignored .env
 ├── requirements.txt
@@ -375,6 +404,10 @@ ZENOH_ROUTER=tcp/localhost:7447 python -m fleet_simulator
 - [ ] Live map with fleet positions from `lat`/`lon` (Leaflet or MapLibre).
 - [ ] Persistence, so registries and reports survive a restart (they are in memory today).
 - [ ] CBOR or protobuf encoding to measure the bandwidth difference.
+
+## Presentation
+
+The slides we showed to the jury are in [`docs/presentation/`](docs/presentation/): [PowerPoint](docs/presentation/CoreFleet_Presentation.pptx) and [PDF](docs/presentation/CoreFleet_Presentation.pdf).
 
 ## License
 
