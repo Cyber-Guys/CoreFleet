@@ -1,10 +1,33 @@
-# CoreFleet
+<p align="center">
+  <img src="docs/assets/banner.png" width="100%" alt="CoreFleet: cloud and edge fleet telemetry over Eclipse Zenoh">
+</p>
 
-Fleet telemetry that moves between cloud and edge processing over Eclipse Zenoh, with driver reports written by an LLM.
+<p align="center">
+  <b>Fleet telemetry that moves between cloud and edge processing over Eclipse Zenoh, with driver reports written by an LLM.</b><br>
+  <sub>CEI-Sphere Hackathon "Code the Continuum" · Cagliari · Challenge 1 + Challenge 3 · built 30 June and 1 July 2026 by team CyberGuys</sub>
+</p>
 
-CoreFleet was built by [Cyber Guys](https://github.com/Cyber-Guys) at the [CEI-Sphere hackathon "Code the Continuum"](https://ceisphere.eu/events/code-continuum) (Cagliari, 30 June to 1 July 2026). It answers two of the event's challenges with one product: Challenge 1 (Eclipse Zenoh and sustainable edge-cloud) and Challenge 3 (Jakarta EE, AI and the Hourglass Model). The project placed 1st and 3rd across the two challenges.
+<p align="center">
+  <img alt="Result: 1st + 3rd" src="https://img.shields.io/badge/Code%20the%20Continuum-1st%20%2B%203rd-E0533A">
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB">
+  <img alt="Eclipse Zenoh" src="https://img.shields.io/badge/Eclipse-Zenoh-0A84FF">
+  <img alt="Jakarta EE 11" src="https://img.shields.io/badge/Jakarta%20EE-11-F7941E">
+  <img alt="Java 17" src="https://img.shields.io/badge/java-17-ED8B00">
+  <img alt="Vue 3" src="https://img.shields.io/badge/vue-3-42B883">
+  <img alt="License EPL 2.0" src="https://img.shields.io/badge/license-EPL%202.0-2EA44F">
+</p>
 
-## The idea
+## Built at Code the Continuum
+
+<p align="center">
+  <img src="docs/assets/event.png" width="100%" alt="Code the Continuum, CEI-Sphere Hackathon, University of Cagliari, 30 June and 1 July 2026, Challenge 1: Eclipse Zenoh, Challenge 3: Jakarta EE + AI">
+</p>
+
+CoreFleet was built in two days at **Code the Continuum**, the CEI-Sphere hackathon held at the University of Cagliari on 30 June and 1 July 2026 and organised by CEI-Sphere, O-CEI and COP-PILOT. The event was about the cloud-edge-IoT continuum.
+
+We answered two challenges with one product: **Challenge 1** (Eclipse Zenoh and sustainable edge-cloud) and **Challenge 3** (Jakarta EE, AI and the Hourglass Model). CoreFleet won **1st and 3rd place** across the two challenges, for €750 and €300 in prizes. The briefs are in [The hackathon](#the-hackathon).
+
+## What CoreFleet does
 
 CoreFleet is a fictional taxi and car-sharing company. It owns the cars and leases them to drivers, either taxi operators or subscribers. Each car carries an IoT device (OBD2 reader, accelerometer, GPS) that streams telemetry to the platform.
 
@@ -15,7 +38,64 @@ The fleet keeps growing, and the network has a fixed budget. The server decides,
 
 When the channel fills up, the server moves the newest cars to EDGE. The fleet ends up as a mix: as many cars in CLOUD as the channel can carry, the rest in EDGE. A web app shows the connected fleet with live telemetry and the vehicle and driver registries. On request, a Jakarta EE service asks an LLM for a report on how a driver drives and treats the company's cars.
 
-Challenge 1 asked teams to compare cloud-only and edge-accelerated deployments and measure the bandwidth and energy saved. CoreFleet measures the bytes per second produced in each mode and estimates the energy saved with `JOULES_PER_MB`. It also switches between the two at runtime based on load. The driver reports cover Challenge 3. The numbers in them (scores, counts, grades) come from the telemetry pipeline; the LLM only writes the text around them.
+Everything runs in Docker with one command, and the services can also be split across several machines.
+
+## Contents
+
+- [The hackathon](#the-hackathon)
+- [Architecture](#architecture)
+- [Zenoh protocol](#zenoh-protocol)
+- [How the server splits CLOUD and EDGE](#how-the-server-splits-cloud-and-edge)
+- [Telemetry data](#telemetry-data)
+- [Cars, drivers and trips](#cars-drivers-and-trips)
+- [Registries and driver reports](#registries-and-driver-reports-challenge-3-jakarta-ee--llm)
+- [Repository layout](#repository-layout)
+- [Getting started](#getting-started)
+- [Roadmap](#roadmap)
+- [Team](#team)
+- [License](#license)
+
+## The hackathon
+
+The organisers' description of the event:
+
+> Code the Continuum brings together students, developers, researchers, innovators, open-source communities, pilot teams and solution providers for two days of hands-on collaboration around the cloud-edge-IoT continuum.
+>
+> The event creates a practical space for experimentation, co-creation and exchange, where participants will work on real challenges related to open technologies, interoperability and the reuse of assets across large-scale pilot environments.
+
+We took two of the challenges. This is how CoreFleet answers each one:
+
+| Challenge | Our answer |
+|---|---|
+| **1 · Eclipse Zenoh and sustainable edge-cloud:** compare cloud-only and edge-accelerated deployments and measure bandwidth and energy | Every car can run in either mode, and the server switches each one at runtime based on load. It measures the bytes per second in each mode and estimates the transmission energy saved with `JOULES_PER_MB`. |
+| **3 · Jakarta EE, AI and the Hourglass Model:** a Jakarta EE application that maps a domain onto the Hourglass Model with an LLM | An Open Liberty service built from the Eclipse template keeps the vehicle and driver registries and writes a report per driver with langchain4j, including its Hourglass mapping. The scores come from the telemetry; the LLM only writes the text. |
+
+The text below is quoted from the event brief.
+
+### Challenge 1 (O-CEI): Eclipse Zenoh and sustainable edge-cloud
+
+> Participants will explore how Eclipse Zenoh can support energy-aware edge-cloud applications by comparing "cloud-only" and "edge-accelerated" deployments. Through hands-on experimentation, they will measure how optimising data flows across the continuum can reduce bandwidth usage and contribute to lower energy consumption.
+
+- Scenarios:
+  - Challenge 1.A: distributed image processing with Zenoh, comparing cloud and edge execution.
+  - Challenge 1.B: geo-distributed content delivery with Zenoh and SkyFlok, comparing traffic across edge and cloud.
+- Task: install the Zenoh client libraries (for example Python or Rust), run the demo repositories, adapt them with your own data, and compare edge and cloud configurations.
+- Inputs: example source code and demo repositories (GitHub).
+- Definition of done: at least one scenario running, with visible Zenoh message exchanges and a short explanation of the results.
+- Skills: programming (Python, Rust, C/C++), basic networking and distributed systems.
+- Requirements: a laptop (Windows, Ubuntu or macOS) that can run the Zenoh demos and install development tools.
+- Mentors: software engineers from ZettaScale.
+
+### Challenge 3 (Eclipse Foundation): Jakarta EE, AI and the Hourglass Model
+
+> Proposed by the Eclipse Foundation, this challenge invites participants to design and implement a Jakarta EE application that models and analyses enterprise domains using the [Hourglass Model](https://ceisphere.eu/hourglass-model). The mapping will be supported by an external Large Language Model (LLM), integrated through modern AI engineering and agentic techniques.
+
+- Scenario: generate the Hourglass Model for a given domain and use case.
+- Task: design and implement a Jakarta EE application that models and analyses enterprise domains using the Hourglass Model, supported by an external LLM and agentic tools.
+- Inputs: skeleton project, OpenAI API key, starter guides and links to resources.
+- Definition of done: a complete, runnable Jakarta EE project.
+- Skills: Java, Maven and general knowledge of agentic AI techniques.
+- Mentor: Ivar Grimstad, Jakarta EE Developer Advocate, Eclipse Foundation.
 
 ## Architecture
 
@@ -286,37 +366,16 @@ ZENOH_ROUTER=tcp/localhost:7447 python -m fleet_simulator
 - [ ] Persistence, so registries and reports survive a restart (they are in memory today).
 - [ ] CBOR or protobuf encoding to measure the bandwidth difference.
 
-## Appendix: the hackathon challenges
+## Team
 
-The text below is quoted from the event brief.
+Team **CyberGuys**, a hackathon team from Sardinia.
 
-### CEI-Sphere Hackathon: Code the Continuum
+<p align="center">
+  <a href="https://github.com/uNickz"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/uNickz-dark.png"><img src="docs/assets/team/uNickz-light.png" width="140" alt="Nicholas Meli (@uNickz)"></picture></a>&nbsp;&nbsp;
+  <a href="https://github.com/doliv8"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/doliv8-dark.png"><img src="docs/assets/team/doliv8-light.png" width="140" alt="Diego Oliva (@doliv8)"></picture></a>&nbsp;&nbsp;
+  <a href="https://github.com/AndreaCerolini"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/AndreaCerolini-dark.png"><img src="docs/assets/team/AndreaCerolini-light.png" width="140" alt="Andrea Cerolini (@AndreaCerolini)"></picture></a>
+</p>
 
-> Code the Continuum brings together students, developers, researchers, innovators, open-source communities, pilot teams and solution providers for two days of hands-on collaboration around the cloud-edge-IoT continuum.
->
-> The event creates a practical space for experimentation, co-creation and exchange, where participants will work on real challenges related to open technologies, interoperability and the reuse of assets across large-scale pilot environments.
+## License
 
-#### Challenge 1, O-CEI: Eclipse Zenoh and sustainable edge-cloud
-
-> Participants will explore how Eclipse Zenoh can support energy-aware edge-cloud applications by comparing "cloud-only" and "edge-accelerated" deployments. Through hands-on experimentation, they will measure how optimising data flows across the continuum can reduce bandwidth usage and contribute to lower energy consumption.
-
-- Scenarios:
-  - Challenge 1.A: distributed image processing with Zenoh, comparing cloud and edge execution.
-  - Challenge 1.B: geo-distributed content delivery with Zenoh and SkyFlok, comparing traffic across edge and cloud.
-- Task: install the Zenoh client libraries (for example Python or Rust), run the demo repositories, adapt them with your own data, and compare edge and cloud configurations.
-- Inputs: example source code and demo repositories (GitHub).
-- Definition of done: at least one scenario running, with visible Zenoh message exchanges and a short explanation of the results.
-- Skills: programming (Python, Rust, C/C++), basic networking and distributed systems.
-- Requirements: a laptop (Windows, Ubuntu or macOS) that can run the Zenoh demos and install development tools.
-- Mentors: software engineers from ZettaScale.
-
-#### Challenge 3, Eclipse Foundation: Jakarta EE, AI and the Hourglass Model
-
-> Proposed by the Eclipse Foundation, this challenge invites participants to design and implement a Jakarta EE application that models and analyses enterprise domains using the [Hourglass Model](https://ceisphere.eu/hourglass-model). The mapping will be supported by an external Large Language Model (LLM), integrated through modern AI engineering and agentic techniques.
-
-- Scenario: generate the Hourglass Model for a given domain and use case.
-- Task: design and implement a Jakarta EE application that models and analyses enterprise domains using the Hourglass Model, supported by an external LLM and agentic tools.
-- Inputs: skeleton project, OpenAI API key, starter guides and links to resources.
-- Definition of done: a complete, runnable Jakarta EE project.
-- Skills: Java, Maven and general knowledge of agentic AI techniques.
-- Mentor: Ivar Grimstad, Jakarta EE Developer Advocate, Eclipse Foundation.
+CoreFleet is released under the [Eclipse Public License 2.0](LICENSE). The report service started from the Eclipse o-cei [`hourglass-template`](https://gitlab.eclipse.org/eclipse-research-labs/o-cei-project/challenge-3-jakarta-ee-hourglass/hourglass-template), also under EPL 2.0.
