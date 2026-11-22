@@ -8,7 +8,8 @@
 </p>
 
 <p align="center">
-  <img alt="Result: 1st + 3rd" src="https://img.shields.io/badge/Code%20the%20Continuum-1st%20%2B%203rd-E0533A">
+  <img alt="1st place, Challenge 1 Eclipse Zenoh" src="https://img.shields.io/badge/Challenge%201%20Zenoh-1st%20place-E0533A">
+  <img alt="3rd place, Challenge 3 Jakarta EE" src="https://img.shields.io/badge/Challenge%203%20Jakarta%20EE-3rd%20place-E0533A">
   <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-3776AB">
   <img alt="Eclipse Zenoh" src="https://img.shields.io/badge/Eclipse-Zenoh-0A84FF">
   <img alt="Jakarta EE 11" src="https://img.shields.io/badge/Jakarta%20EE-11-F7941E">
@@ -25,7 +26,17 @@
 
 CoreFleet was built in two days at **Code the Continuum**, the CEI-Sphere hackathon held at the University of Cagliari on 30 June and 1 July 2026 and organised by CEI-Sphere, O-CEI and COP-PILOT. The event was about the cloud-edge-IoT continuum.
 
-We answered two challenges with one product: **Challenge 1** (Eclipse Zenoh and sustainable edge-cloud) and **Challenge 3** (Jakarta EE, AI and the Hourglass Model). CoreFleet won **1st and 3rd place** across the two challenges, for €750 and €300 in prizes. The briefs are in [The hackathon](#the-hackathon).
+We answered two challenges with one product: **Challenge 1** (Eclipse Zenoh and sustainable edge-cloud) and **Challenge 3** (Jakarta EE, AI and the Hourglass Model). CoreFleet won **1st place in Challenge 1** (€750) and **3rd place in Challenge 3** (€300). The briefs are in [The hackathon](#the-hackathon).
+
+## Team
+
+Team **CyberGuys**, a hackathon team from Sardinia.
+
+<p align="center">
+  <a href="https://github.com/uNickz"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/uNickz-dark.png"><img src="docs/assets/team/uNickz-light.png" width="140" alt="Nicholas Meli (@uNickz)"></picture></a>&nbsp;&nbsp;
+  <a href="https://github.com/doliv8"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/doliv8-dark.png"><img src="docs/assets/team/doliv8-light.png" width="140" alt="Diego Oliva (@doliv8)"></picture></a>&nbsp;&nbsp;
+  <a href="https://github.com/AndreaCerolini"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/AndreaCerolini-dark.png"><img src="docs/assets/team/AndreaCerolini-light.png" width="140" alt="Andrea Cerolini (@AndreaCerolini)"></picture></a>
+</p>
 
 ## What CoreFleet does
 
@@ -52,7 +63,6 @@ Everything runs in Docker with one command, and the services can also be split a
 - [Repository layout](#repository-layout)
 - [Getting started](#getting-started)
 - [Roadmap](#roadmap)
-- [Team](#team)
 - [License](#license)
 
 ## The hackathon
@@ -65,10 +75,10 @@ The organisers' description of the event:
 
 We took two of the challenges. This is how CoreFleet answers each one:
 
-| Challenge | Our answer |
-|---|---|
-| **1 · Eclipse Zenoh and sustainable edge-cloud:** compare cloud-only and edge-accelerated deployments and measure bandwidth and energy | Every car can run in either mode, and the server switches each one at runtime based on load. It measures the bytes per second in each mode and estimates the transmission energy saved with `JOULES_PER_MB`. |
-| **3 · Jakarta EE, AI and the Hourglass Model:** a Jakarta EE application that maps a domain onto the Hourglass Model with an LLM | An Open Liberty service built from the Eclipse template keeps the vehicle and driver registries and writes a report per driver with langchain4j, including its Hourglass mapping. The scores come from the telemetry; the LLM only writes the text. |
+| Challenge | Our answer | Result |
+|---|---|---|
+| **1 · Eclipse Zenoh and sustainable edge-cloud:** compare cloud-only and edge-accelerated deployments and measure bandwidth and energy | Every car can run in either mode, and the server switches each one at runtime based on load. It measures the bytes per second in each mode and estimates the transmission energy saved with `JOULES_PER_MB`. | 1st place, €750 |
+| **3 · Jakarta EE, AI and the Hourglass Model:** a Jakarta EE application that maps a domain onto the Hourglass Model with an LLM | An Open Liberty service built from the Eclipse template keeps the vehicle and driver registries and writes a report per driver with langchain4j, including its Hourglass mapping. The scores come from the telemetry; the LLM only writes the text. | 3rd place, €300 |
 
 The text below is quoted from the event brief.
 
@@ -365,16 +375,6 @@ ZENOH_ROUTER=tcp/localhost:7447 python -m fleet_simulator
 - [ ] Live map with fleet positions from `lat`/`lon` (Leaflet or MapLibre).
 - [ ] Persistence, so registries and reports survive a restart (they are in memory today).
 - [ ] CBOR or protobuf encoding to measure the bandwidth difference.
-
-## Team
-
-Team **CyberGuys**, a hackathon team from Sardinia.
-
-<p align="center">
-  <a href="https://github.com/uNickz"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/uNickz-dark.png"><img src="docs/assets/team/uNickz-light.png" width="140" alt="Nicholas Meli (@uNickz)"></picture></a>&nbsp;&nbsp;
-  <a href="https://github.com/doliv8"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/doliv8-dark.png"><img src="docs/assets/team/doliv8-light.png" width="140" alt="Diego Oliva (@doliv8)"></picture></a>&nbsp;&nbsp;
-  <a href="https://github.com/AndreaCerolini"><picture><source media="(prefers-color-scheme: dark)" srcset="docs/assets/team/AndreaCerolini-dark.png"><img src="docs/assets/team/AndreaCerolini-light.png" width="140" alt="Andrea Cerolini (@AndreaCerolini)"></picture></a>
-</p>
 
 ## License
 
