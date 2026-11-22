@@ -169,7 +169,7 @@ onUnmounted(() => {
             <span class="cf-mono did">{{ d.did }}</span>
           </li>
         </ul>
-        <span v-else class="muted">—</span>
+        <span v-else class="muted">-</span>
       </div>
     </section>
   </div>

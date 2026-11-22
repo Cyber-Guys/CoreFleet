@@ -78,7 +78,7 @@ onUnmounted(() => {
           :to="{ path: '/drivers', query: { did: r.did } }"
           @click.stop
         >{{ r.name || r.did }}</RouterLink>
-        <span v-else class="driver muted">—</span>
+        <span v-else class="driver muted">-</span>
         <span v-if="r.speed_kmh != null" class="speed cf-mono">{{ Math.round(r.speed_kmh) }}<small>km/h</small></span>
         <span class="chev">›</span>
       </li>

@@ -67,13 +67,13 @@ onUnmounted(() => {
     <div v-else-if="empty" class="empty">
       <span class="empty__glyph">◴</span>
       <p class="empty__title">No reports yet</p>
-      <p class="empty__hint">Go to <b>Drivers</b>, pick a driver and press “Generate Report”.</p>
+      <p class="empty__hint">Go to <b>Drivers</b>, pick a driver and press "Generate Report".</p>
     </div>
 
     <div v-else class="empty">
       <span class="empty__glyph">⌀</span>
       <p class="empty__title">No results found</p>
-      <p class="empty__hint">No report matches “<b>{{ searchQuery }}</b>”.</p>
+      <p class="empty__hint">No report matches "<b>{{ searchQuery }}</b>".</p>
     </div>
   </BaseWidget>
 </template>

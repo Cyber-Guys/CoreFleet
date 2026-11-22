@@ -11,43 +11,44 @@ import dev.langchain4j.service.V;
 public interface DriverReportAiService {
 
     @SystemMessage("""
-        You are a fleet-analytics assistant for CoreFleet, a car-sharing company.
-        A report is about a DRIVER (a person) and aggregates ALL of their trips with
-        the company's cars.
+        You write driver reports for CoreFleet, a car-sharing company. Each report is
+        about one driver (a person) and covers all of their trips with the company's
+        cars.
 
-        The JSON gives you AUTHORITATIVE, already-computed figures: 'safetyScore',
+        The JSON input already contains the computed figures: 'safetyScore',
         'ecoScore', 'overallGrade', 'tripCount', 'totalKm', 'infractions', 'warnings',
-        the recurring bad behaviours ('recidivist'), and 'perTripTrajectory' (per-trip
-        safety/eco, for direction only).
+        the bad habits that repeat across trips ('recidivist'), and
+        'perTripTrajectory' (safety and eco per trip).
 
-        DATA CONSISTENCY — ABSOLUTE RULE: use ONLY the exact numbers provided. When you
-        mention a score, distance, count or grade, quote the given value VERBATIM
-        (e.g. safety = safetyScore, eco = ecoScore). DO NOT recalculate, re-average,
-        round differently, sum, or invent ANY metric. Never compute your own average
-        from 'perTripTrajectory' — use it solely to say whether the driver is improving,
-        worsening or stable. If a number is not in the input, do not state it.
+        Numbers: use only the values in the input. When you mention a score, distance,
+        count or grade, copy the given value exactly (safety is safetyScore, eco is
+        ecoScore). Do not recalculate, average, round, sum or invent any metric. Use
+        'perTripTrajectory' only to say whether the driver is improving, getting worse
+        or stable, and never compute your own average from it. If a number is not in
+        the input, do not mention it.
 
-        Write a professional report on how this person drives and treats the company's
-        vehicles. Explicitly call out recidivist (recurring) bad habits as a pattern,
-        note whether the driver is improving or worsening, and praise what is good. Give
-        concrete, actionable advice. Keep each list to at most four short items.
+        Write a professional report on how this person drives and how they treat the
+        company's cars. Name the bad habits that repeat across trips, say whether the
+        driver is improving or getting worse, and point out what they do well. Give
+        concrete advice the driver can act on. Keep each list to four short items or
+        fewer.
 
-        POLICY — FINES: if 'infractions' > 0 the driver has received one or more fines
-        (multe) for sustained speeding. Treat this as a SERIOUS policy violation. Be
-        strict and formal, do not soften it: state clearly that the driver breached
-        company policy and road rules, and spell out the impact — financial (fines,
-        higher insurance premiums, possible suspension from the fleet) and safety
-        (elevated crash risk for themselves, passengers and the public). Their safety
-        standing is heavily downgraded; cut praise accordingly and lead the summary with
-        the violation.
+        Fines: if 'infractions' is greater than 0, the driver has received one or more
+        fines (multe) for sustained speeding. Treat this as a serious breach of company
+        policy and be strict and formal about it. Say clearly that the driver broke
+        company policy and the road rules, and explain the consequences: the financial
+        ones (fines, higher insurance premiums, possible suspension from the fleet) and
+        the safety ones (higher risk of a crash for the driver, passengers and other
+        people on the road). Their safety rating is much lower because of it, so keep
+        praise short and open the summary with the violation.
 
         Map the driver onto the Hourglass Model for the "connected fleet driving" domain:
           - stakeholders (top): driver, fleet operations, insurer, city;
-          - capabilities (thin waist): the normalized eco/safety KPIs everyone relies on;
+          - capabilities (thin waist): the eco and safety KPIs everyone relies on;
           - standardsGroups (bottom): the raw signals (OBD2 PIDs, GPS, IMU/accelerometer).
 
-        Write 'summary', 'strengths', 'recommendations', 'maintenanceHints' and
-        'hourglass'. The numeric fields are authoritative and set by the platform.""")
+        Fill in 'summary', 'strengths', 'recommendations', 'maintenanceHints' and
+        'hourglass'. The platform sets the numeric fields.""")
     @UserMessage("Driver stats JSON:\n{{driver}}")
     DriverReport analyze(@V("driver") String driver);
 }

@@ -1,17 +1,18 @@
 # CoreFleet dashboard
 
-Operations console for CoreFleet, built with Vue 3 (Composition API, `<script setup>`), vue-router and Chart.js. It has five tabs:
+Operations console for CoreFleet, built with Vue 3 (Composition API, `<script setup>`), vue-router and Chart.js. It has six tabs:
 
 - Dashboard: active vehicles, CLOUD/EDGE status, Cloud vs Edge chart, connected vehicles with live speed
-- Veicoli: vehicle registry and live telemetry of running trips
-- Drivers: driver registry and the "Genera report" button
+- Vehicles: vehicle registry and live telemetry of running trips
+- Drivers: driver registry and the "Generate Report" button
+- Network: CLOUD and EDGE traffic and estimated energy
 - Reports: report history
 - About
 
 ## Stack
 
 - Vue 3 with Vite, `<script setup>` in every component
-- vue-router for the five tabs
+- vue-router for the six tabs
 - Chart.js for the doughnut chart (Cloud orange, Edge purple)
 - Scoped CSS, with design tokens in `src/assets/styles/theme.css`
 - Fonts: Chakra Petch for headings, Inter for body text, JetBrains Mono for plates and telemetry
@@ -39,7 +40,7 @@ You can also start it with the whole stack from the repository root (`docker com
 src/
 ├── main.js                 # app bootstrap
 ├── App.vue                 # shell: sidebar + topbar (search) + router-view
-├── router/index.js         # Dashboard / Veicoli / Drivers / Reports / About routes
+├── router/index.js         # Dashboard / Vehicles / Drivers / Network / Reports / About routes
 ├── assets/styles/theme.css # design tokens, base, shared glow/pulse keyframes
 ├── services/fleetApi.js    # API client: getActive/getVehicles/getDrivers/getReports/…
 ├── composables/useFleet.js # shared store: live fleet data + search query
@@ -60,7 +61,7 @@ The app calls `/report-api` on its own origin. In Docker, nginx forwards it to t
 
 ## Navigation and search
 
-The selected vehicle or driver is in the URL (`/vehicles?vid=…`, `/drivers?did=…`), so the tabs link to each other: from a vehicle's recent drivers to that driver, from a driver's cars to that vehicle, from a Dashboard row to that vehicle. The search bar filters the current tab by plate, driver name or id. With no match it shows "Nessun risultato trovato."
+The selected vehicle or driver is in the URL (`/vehicles?vid=…`, `/drivers?did=…`), so the tabs link to each other: from a vehicle's recent drivers to that driver, from a driver's cars to that vehicle, from a Dashboard row to that vehicle. The search bar filters the current tab by plate, driver name or id.
 
 ## Accessibility
 

@@ -1,0 +1,49 @@
+{
+  "adminspace": {
+    "enabled": true,
+    "permissions": {
+      "read": true,
+      "write": false
+    }
+  },
+  "connect": {
+    "endpoints": [
+      "tls/<your-router>.zettascale.cloud:7447"
+    ]
+  },
+  "downsampling": [],
+  "metadata": {
+    "name": "CyberGuys"
+  },
+  "mode": "client",
+  "scouting": {
+    "gossip": {
+      "autoconnect": {
+        "peer": [],
+        "router": []
+      },
+      "enabled": true,
+      "multihop": true
+    },
+    "multicast": {
+      "enabled": true
+    }
+  },
+  "transport": {
+    "link": {
+      "tls": {
+        "connect_certificate_base64": "<base64 PEM from the ZettaScale console>",
+        "connect_private_key_base64": "<base64 PEM from the ZettaScale console>",
+        "enable_mtls": true,
+        "root_ca_certificate_base64": "<base64 PEM from the ZettaScale console>",
+        "verify_name_on_connect": true
+      }
+    },
+    "unicast": {
+      "compression": {
+        "enabled": true
+      },
+      "max_links": 2
+    }
+  }
+}

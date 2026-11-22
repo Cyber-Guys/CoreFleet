@@ -36,7 +36,7 @@ flowchart LR
         J["Jakarta EE service\nregistries + LLM reports"]
     end
 
-    W["Web app\nDashboard / Veicoli / Drivers / Reports"]
+    W["Web app\nDashboard / Vehicles / Drivers / Network / Reports"]
 
     V1 -- raw / summary --> R
     V2 -- raw / summary --> R
@@ -56,7 +56,7 @@ flowchart LR
 | Fleet simulator | `fleet_simulator/` | Simulates cars, drivers and trips. Each active trip is an agent that streams OBD2 and GPS data over Zenoh. | done |
 | Zenoh router | `zenoh_router/` | Eclipse Zenoh router in Docker (wire `:7447`, REST `:8000`). | done |
 | Fleet server | `zenoh_router/subscriber/fleet_server.py` | Subscribes to telemetry, detects congestion, publishes mode decisions, scores each trip and sends it to the registry service. | done |
-| Dashboard | `webapp/` | Vue 3 control room: Dashboard, Veicoli, Drivers, Reports (history), About. | done |
+| Dashboard | `webapp/` | Vue 3 control room: Dashboard, Vehicles, Drivers, Network, Reports (history), About. | done |
 | Jakarta EE + LLM service | `report-service/` | Open Liberty and langchain4j: vehicle and driver registries, cached driver reports, Hourglass mapping. | done |
 | Live map | | Fleet positions (Leaflet or MapLibre) from `lat`/`lon`. | planned |
 
@@ -176,7 +176,8 @@ The OpenAI key comes from the `OPENAI_API_KEY` environment variable, set in a `.
 .
 ├── corefleet/                  # Shared library (vehicle + server)
 │   ├── protocol.py             # Key expressions, Mode enum, JSON codec
-│   └── client.py               # VehicleClient: liveliness, mode, publishers
+│   ├── client.py               # VehicleClient: liveliness, mode, publishers
+│   └── config.example.json     # Zenoh Cloud client config template (TLS)
 ├── fleet_simulator/            # Cars + drivers + trips simulator
 │   ├── __main__.py             # Entry point: python -m fleet_simulator
 │   ├── config.py               # Physical constants, driver profiles, thresholds
@@ -193,7 +194,7 @@ The OpenAI key comes from the `OPENAI_API_KEY` environment variable, set in a `.
 ├── report-service/             # Jakarta EE 11 + langchain4j (Challenge 3)
 │   ├── src/main/java/dukes/    # fleet/ (registries, reports) + hourglass/ + ai/
 │   └── Dockerfile              # Maven build -> Open Liberty (Java 17)
-├── webapp/                     # Vue 3 dashboard (Dashboard/Veicoli/Drivers/Reports)
+├── webapp/                     # Vue 3 dashboard (Dashboard/Vehicles/Drivers/Network/Reports)
 ├── docker-compose.yaml         # Full stack: router + server + sim + report + webapp
 ├── .env.example                # OPENAI_API_KEY lives in a gitignored .env
 ├── requirements.txt
@@ -213,7 +214,7 @@ cp .env.example .env        # then edit .env and set OPENAI_API_KEY
 docker compose up --build
 ```
 
-This starts the router, fleet server, simulator, report service and dashboard. The simulator starts with a batch of cars and adds more over time, while new customers take cars for trips. The `fleet-server` logs show the `[stats]` lines with bandwidth and energy, and a `trip … ingested` line for every finished trip. In the dashboard, the Veicoli tab shows live telemetry for running trips, and in the Drivers tab you can pick a driver and press "Genera report".
+This starts the router, fleet server, simulator, report service and dashboard. The simulator starts with a batch of cars and adds more over time, while new customers take cars for trips. The `fleet-server` logs show the `[stats]` lines with bandwidth and energy, and a `trip … ingested` line for every finished trip. In the dashboard, the Vehicles tab shows live telemetry for running trips, and in the Drivers tab you can pick a driver and press "Generate Report".
 
 - Dashboard: http://localhost:8080
 - Report service: http://localhost:9080/report/api/status
@@ -246,6 +247,14 @@ ZENOH_ROUTER=tcp/<B-IP>:7447 ZENOH_REST_URL=http://<B-IP>:8000 \
 
 The browser only talks to the webapp's nginx. It proxies `/report-api` to the report service and also proxies the Zenoh REST endpoint, with the upstreams set from `REPORT_SERVICE_URL` and `ZENOH_REST_URL` through `envsubst`. The frontend bundle contains no backend host, so the same build works on one machine or many.
 
+### With a Zenoh router on ZettaScale Cloud
+
+`docker-compose.cloud.yaml` runs the same services against a router hosted on ZettaScale Cloud instead of a local one. The connection uses mutual TLS, so it needs the router endpoint and the client certificates from the ZettaScale console. Copy `corefleet/config.example.json` to `corefleet/config.json`, fill in those values (git ignores this file), then:
+
+```bash
+docker compose -f docker-compose.cloud.yaml up --build
+```
+
 ### Running components locally
 
 ```bash
@@ -271,7 +280,7 @@ ZENOH_ROUTER=tcp/localhost:7447 python -m fleet_simulator
 - [x] Jakarta registries and reports: vehicle and driver stats, cached driver reports, history, Hourglass mapping (langchain4j and OpenAI).
 - [x] Hourglass image per driver, generated in the background with the OpenAI Responses `image_generation` tool and polled by the dashboard.
 - [x] Deployment across machines through `.env` IP overrides and the webapp's nginx proxy.
-- [x] Vue 3 dashboard: Dashboard, Veicoli (live trip), Drivers (with "Genera report"), Reports history.
+- [x] Vue 3 dashboard: Dashboard, Vehicles (live trip), Drivers (with "Generate Report"), Network, Reports history.
 - [x] Full Docker stack: router, server, simulator, report service and dashboard.
 - [ ] Live map with fleet positions from `lat`/`lon` (Leaflet or MapLibre).
 - [ ] Persistence, so registries and reports survive a restart (they are in memory today).

@@ -1,6 +1,6 @@
 <script setup>
 /* Driver registry: list and detail (anagrafica, trips, km, infractions), with a
-"Genera report" button. The report is cached until the driver's data changes. */
+"Generate Report" button. The report is cached until the driver's data changes. */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'
@@ -199,7 +199,7 @@ onUnmounted(() => {
             :to="{ path: '/vehicles', query: { vid } }"
           >{{ vid }}</RouterLink>
         </div>
-        <span v-else class="muted">—</span>
+        <span v-else class="muted">-</span>
       </div>
 
       <div class="actions">

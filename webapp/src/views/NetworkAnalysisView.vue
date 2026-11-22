@@ -28,7 +28,7 @@ const reductionPct = computed(() =>
   allCloudBps.value > 0 ? Math.round((1 - allEdgeBps.value / allCloudBps.value) * 100) : 0,
 )
 const factor = computed(() =>
-  allEdgeBps.value > 0 ? (allCloudBps.value / allEdgeBps.value).toFixed(1) : '—',
+  allEdgeBps.value > 0 ? (allCloudBps.value / allEdgeBps.value).toFixed(1) : '-',
 )
 
 function jPerHour(bps) {
@@ -55,7 +55,7 @@ function barPct(b) {
         <div class="hero__num"><span class="cf-mono">{{ reductionPct }}</span><small>%</small></div>
         <p class="hero__sub">
           Aggregating on the edge sends <b>{{ factor }}×</b> less data for the same
-          {{ n }} vehicles — the transmission energy drops with it.
+          {{ n }} vehicles, and the transmission energy drops with it.
         </p>
       </div>
       <div class="hero__side">
@@ -87,7 +87,7 @@ function barPct(b) {
           <div class="mode__row"><span>Bandwidth</span><b class="cf-mono">{{ fmtBps(allEdgeBps) }}</b></div>
           <div class="mode__bar"><i style="--c: var(--purple-glow)" :style="{ width: barPct(allEdgeBps) + '%' }" /></div>
           <div class="mode__row"><span>Energy</span><b class="cf-mono">{{ fmtJ(jPerHour(allEdgeBps)) }}</b></div>
-          <p class="mode__note">Coarser data, drastically lower cost.</p>
+          <p class="mode__note">Coarser data, much less bandwidth.</p>
         </div>
       </BaseWidget>
 
@@ -100,7 +100,7 @@ function barPct(b) {
             <span class="mix__item"><i style="--c: var(--purple-glow)" />{{ edgeCount }} Edge</span>
             <span class="mix__item">{{ n }} active</span>
           </div>
-          <p class="mode__note">The server shifts the fleet along this axis as load changes.</p>
+          <p class="mode__note">The server moves vehicles between the two modes as the load changes.</p>
         </div>
       </BaseWidget>
     </div>

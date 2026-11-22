@@ -6,3 +6,6 @@ scratch/
 
 # java build output
 report-service/target/
+
+# Zenoh cloud config with TLS keys, copy from corefleet/config.example.json
+corefleet/config.json

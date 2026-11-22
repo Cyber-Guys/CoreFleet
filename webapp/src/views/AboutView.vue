@@ -27,7 +27,7 @@ const pillars = [
       <p class="hero">
         A <b>car / taxi sharing</b> fleet where the startup's cars are handed to drivers.
         On-board IoT devices stream telemetry in real time along the
-        <b>cloud–edge continuum</b>, cutting bandwidth and energy when the network saturates.
+        <b>cloud-edge continuum</b>, cutting bandwidth and energy when the network saturates.
       </p>
 
       <div class="pillars">

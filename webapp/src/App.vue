@@ -16,7 +16,7 @@ const clockText = computed(() =>
   now.value.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
 )
 const updatedText = computed(() => {
-  if (!state.fleet.updatedAt) return '—'
+  if (!state.fleet.updatedAt) return '-'
   const s = Math.max(0, Math.round((now.value.getTime() - state.fleet.updatedAt) / 1000))
   return s < 2 ? 'now' : `${s}s ago`
 })

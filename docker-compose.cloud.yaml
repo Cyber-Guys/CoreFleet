@@ -1,3 +1,9 @@
+# Same stack, but the services connect to a Zenoh router hosted on ZettaScale Cloud
+# instead of a local one. Create corefleet/config.json from
+# corefleet/config.example.json with your router endpoint and TLS certificates
+# (git ignores it), then run:
+#   docker compose -f docker-compose.cloud.yaml up --build
+
 services:
   fleet-server:
     build:
