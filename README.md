@@ -1,37 +1,23 @@
 # CoreFleet
 
-**Adaptive cloud–edge fleet telemetry over Eclipse Zenoh, with LLM-generated driving reports.**
+Fleet telemetry that moves between cloud and edge processing over Eclipse Zenoh, with driver reports written by an LLM.
 
-CoreFleet is a hackathon project for the [CEI-Sphere Hackathon — Code the Continuum](https://ceisphere.eu/events/code-continuum). It combines **Challenge 1 (Eclipse Zenoh & Sustainable Edge-Cloud)** and **Challenge 3 (Jakarta EE, AI & the Hourglass Model)** into a single, coherent product.
+CoreFleet was built by [Cyber Guys](https://github.com/Cyber-Guys) at the [CEI-Sphere hackathon "Code the Continuum"](https://ceisphere.eu/events/code-continuum) (Cagliari, 30 June to 1 July 2026). It answers two of the event's challenges with one product: Challenge 1 (Eclipse Zenoh and sustainable edge-cloud) and Challenge 3 (Jakarta EE, AI and the Hourglass Model). The project placed 1st and 3rd across the two challenges.
 
----
+## The idea
 
-## 1. The Concept
+CoreFleet is a fictional taxi and car-sharing company. It owns the cars and leases them to drivers, either taxi operators or subscribers. Each car carries an IoT device (OBD2 reader, accelerometer, GPS) that streams telemetry to the platform.
 
-CoreFleet is a fictional **taxi-sharing / car-sharing startup**. We own the vehicles and lease them to drivers (taxi operators or subscribers). Every car carries an **IoT edge device** (OBD2 reader + accelerometer + GPS) that streams live telemetry back to our platform.
+The fleet keeps growing, and the network has a fixed budget. The server decides, for each car, how it should transmit:
 
-The platform must scale to a large, growing fleet **without saturating the network or wasting energy**. To do that, it continuously chooses, per the current network pressure, *how* each vehicle should transmit:
+- `CLOUD` mode: the device sends raw telemetry every second and the server does all the processing. Best detail, most bandwidth.
+- `EDGE` mode: the device aggregates locally and sends a summary every 15 seconds. Much less bandwidth and transmission energy, coarser data.
 
-- **`CLOUD` mode**: the device streams raw telemetry every second. The server does all the processing. Maximum fidelity, maximum bandwidth.
-- **`EDGE` mode**: once the channel saturates, the server moves the **overflow vehicles** (newest first) to aggregate locally and send a compact summary every 15 seconds instead. Drastically lower bandwidth and transmission energy, at the cost of temporal resolution.
+When the channel fills up, the server moves the newest cars to EDGE. The fleet ends up as a mix: as many cars in CLOUD as the channel can carry, the rest in EDGE. A web app shows the connected fleet with live telemetry and the vehicle and driver registries. On request, a Jakarta EE service asks an LLM for a report on how a driver drives and treats the company's cars.
 
-The server arbitrates this trade-off in real time, **per vehicle**, so the fleet settles into a hybrid mix — as many cars in CLOUD as the channel can carry, the rest on EDGE. A web app shows the connected fleet with **live telemetry** plus vehicle and driver registries; **on demand**, an **LLM-backed Jakarta EE service** produces a structured report on how each **driver** drives and treats the company's cars.
+Challenge 1 asked teams to compare cloud-only and edge-accelerated deployments and measure the bandwidth and energy saved. CoreFleet measures the bytes per second produced in each mode and estimates the energy saved with `JOULES_PER_MB`. It also switches between the two at runtime based on load. The driver reports cover Challenge 3. The numbers in them (scores, counts, grades) come from the telemetry pipeline; the LLM only writes the text around them.
 
-This directly mirrors the Challenge 1 narrative: *comparing "cloud-only" vs "edge-accelerated" deployments and measuring bandwidth/energy savings*, while the driver reports fulfil Challenge 3.
-
----
-
-## 2. Why It Matters
-
-The core insight of the cloud–edge continuum is that **moving computation toward the data source reduces the volume that must travel across the network**, which reduces both bandwidth cost and transmission energy. CoreFleet makes this tangible:
-
-- It **measures** the bytes/second produced in each mode and estimates the transmission energy saved (`JOULES_PER_MB`).
-- It **adapts automatically**: the system is not statically "cloud" or "edge", it shifts along the continuum based on live load.
-- It keeps a **defensible separation of concerns**: physically-grounded numbers come from the telemetry pipeline; the LLM only writes the human-facing narrative on top of those numbers.
-
----
-
-## 3. Architecture
+## Architecture
 
 ```mermaid
 flowchart LR
@@ -64,47 +50,42 @@ flowchart LR
     W -- REST --> J
 ```
 
-### Components
-
-| Component | Path | Role | Status |
+| Component | Path | What it does | Status |
 |---|---|---|---|
-| **Shared library** | `corefleet/` | Zenoh protocol (keys, modes, codec) + `VehicleClient`, imported by both vehicle and server. | ✅ |
-| **Fleet simulator** | `fleet_simulator/` | Simulates **cars** (assets) + **drivers** (people) + **trips**; each active trip is an agent streaming OBD2/GPS over Zenoh. | ✅ |
-| **Zenoh router** | `zenoh_router/` | Dockerized Eclipse Zenoh router (wire `:7447`, REST `:8000`). | ✅ |
-| **Fleet server** | `zenoh_router/subscriber/fleet_server.py` | Subscribes to telemetry, detects congestion, publishes mode decisions, scores each trip and ingests it into the registry service. | ✅ |
-| **Dashboard** | `webapp/` | Vue 3 control-room UI: Dashboard, **Veicoli**, **Drivers**, **Reports** (history), About. | ✅ |
-| **Jakarta EE + LLM service** | `report-service/` | Open Liberty + langchain4j; vehicle & driver registries, on-demand cached driver reports, Hourglass mapping. | ✅ |
-| **Live map** | _planned_ | Fleet positions (Leaflet / MapLibre) fed from `lat`/`lon`. | ⏳ |
+| Shared library | `corefleet/` | Zenoh protocol (keys, modes, codec) and `VehicleClient`, used by both the vehicles and the server. | done |
+| Fleet simulator | `fleet_simulator/` | Simulates cars, drivers and trips. Each active trip is an agent that streams OBD2 and GPS data over Zenoh. | done |
+| Zenoh router | `zenoh_router/` | Eclipse Zenoh router in Docker (wire `:7447`, REST `:8000`). | done |
+| Fleet server | `zenoh_router/subscriber/fleet_server.py` | Subscribes to telemetry, detects congestion, publishes mode decisions, scores each trip and sends it to the registry service. | done |
+| Dashboard | `webapp/` | Vue 3 control room: Dashboard, Veicoli, Drivers, Reports (history), About. | done |
+| Jakarta EE + LLM service | `report-service/` | Open Liberty and langchain4j: vehicle and driver registries, cached driver reports, Hourglass mapping. | done |
+| Live map | | Fleet positions (Leaflet or MapLibre) from `lat`/`lon`. | planned |
 
----
+## Zenoh protocol
 
-## 4. Zenoh Protocol
-
-`vid` = vehicle id (the licence plate). All keys live under the `core/fleet` namespace.
+`vid` is the vehicle id (the licence plate). All keys live under `core/fleet`.
 
 | Key expression | Direction | Payload | Mode | Notes |
 |---|---|---|---|---|
-| `core/fleet/{vid}/alive` | Vehicle → Server | _liveliness token_ | — | Declared on ignition. Auto-undeclared (DELETE sample) on disconnect → free crash detection. |
-| `core/fleet/{vid}/raw` | Vehicle → Server | JSON telemetry | `CLOUD` | One sample per second. |
-| `core/fleet/{vid}/summary` | Vehicle → Server | JSON aggregate | `EDGE` | One sample per 15-second window. |
-| `core/fleet/{vid}/session` | Vehicle → Server | JSON aggregate | — | Final full-session aggregate, published once on trip end; triggers the trip ingest into the registries. |
-| `core/fleet/{vid}/mode` | Server → Vehicle | `"CLOUD"` \| `"EDGE"` | — | **Per-vehicle** mode. The server assigns each car CLOUD or EDGE independently so the fleet runs a **hybrid mix**. Exposed as a **queryable** (`core/fleet/*/mode`) so a vehicle joining mid-run reads its own current value, then subscribes to it for changes. |
+| `core/fleet/{vid}/alive` | vehicle to server | liveliness token | | Declared on ignition. Zenoh removes it (DELETE sample) when the vehicle disconnects, so crashes are detected without extra code. |
+| `core/fleet/{vid}/raw` | vehicle to server | JSON telemetry | `CLOUD` | One sample per second. |
+| `core/fleet/{vid}/summary` | vehicle to server | JSON aggregate | `EDGE` | One sample per 15-second window. |
+| `core/fleet/{vid}/session` | vehicle to server | JSON aggregate | | Aggregate of the whole trip, published once when the trip ends. Triggers the ingest into the registries. |
+| `core/fleet/{vid}/mode` | server to vehicle | `"CLOUD"` \| `"EDGE"` | | Mode for that one vehicle. Also exposed as a queryable (`core/fleet/*/mode`): a vehicle that joins mid-run reads its current mode, then subscribes for changes. |
 
-The server subscribes with wildcards: `core/fleet/*/raw`, `core/fleet/*/summary`, `core/fleet/*/session`, `core/fleet/*/alive`, so it scales to any number of vehicles without per-vehicle subscription bookkeeping. The end-of-trip ingest is triggered by the `session` payload (an explicit end-of-drive event), so it is independent of liveliness-message ordering.
+The server subscribes with wildcards (`core/fleet/*/raw`, `core/fleet/*/summary`, `core/fleet/*/session`, `core/fleet/*/alive`), so it needs no per-vehicle subscriptions. The end-of-trip ingest runs on the `session` payload, so it does not depend on the order of liveliness events.
 
-Every payload also carries the **driver** taking the trip (`did`, `driver_name`) and the **trip id** (`trip_id`). The final `session` payload additionally carries the driver's anagrafica (`driver_surname`, `driver_cf`, `driver_nationality`) and a `vehicle` snapshot (`odo_km`, `fuel_pct`, `oil_pct`, `lights`) — the data the registries are built from.
+Every payload carries the driver (`did`, `driver_name`) and the trip id (`trip_id`). The final `session` payload also carries the driver's personal data (`driver_surname`, `driver_cf`, `driver_nationality`) and a `vehicle` snapshot (`odo_km`, `fuel_pct`, `oil_pct`, `lights`). The registries are built from these fields.
 
-> **Design notes / improvements over a naïve design**
-> - **Liveliness tokens** instead of a manual `alive`/`dead` message pair: presence is tracked by Zenoh itself, so a device that crashes or loses connectivity is detected automatically.
-> - **`vid` lives in the key path**, not the payload, so subscribers can filter and store per-vehicle by key expression.
-> - Each `core/fleet/{vid}/mode` key is **queryable / retained** so a late-joining vehicle learns *its own* assigned mode immediately, before the next control tick.
-> - JSON is used for the v1 demo; a **CBOR / protobuf** encoding is planned to quantify the bandwidth win.
+Design notes:
 
----
+- Presence uses Zenoh liveliness tokens instead of a pair of `alive`/`dead` messages, so a device that crashes or loses its connection disappears on its own.
+- `vid` is part of the key, so subscribers can filter and store by key expression.
+- Each `core/fleet/{vid}/mode` key answers queries, so a vehicle that joins late learns its mode before the next control tick.
+- Payloads are JSON for now. A CBOR or protobuf encoding is planned to measure the bandwidth difference.
 
-## 5. Adaptive CLOUD ↔ EDGE Logic (per-vehicle hybrid)
+## How the server splits CLOUD and EDGE
 
-The channel is not flipped globally. Instead the server **fills the channel with CLOUD up to a saturation target, then offloads the overflow to EDGE** — so at any moment the fleet is a *hybrid mix* of both modes rather than all-one-or-the-other. On every control tick it recomputes how many vehicles the channel can afford to keep in CLOUD:
+The server does not switch the whole fleet at once. It fills the channel with CLOUD vehicles up to a target and puts the rest in EDGE. On every control tick it recomputes how many vehicles can stay in CLOUD:
 
 ```
 avg_raw_bytes = live EWMA of observed raw-payload size
@@ -115,29 +96,27 @@ vehicles sorted by join order (oldest first):
     the rest              → EDGE    (15 s aggregate)
 ```
 
-So the channel is filled to `CLOUD_SATURATION` (default `0.8` = 80 %) of `BW_LIMIT_BYTES_S`, and **older vehicles keep CLOUD priority** — a newly-joined car is the first to be pushed to EDGE when the channel saturates, and is promoted back to CLOUD as soon as an older trip ends and frees capacity. Each change is published on that vehicle's own `core/fleet/{vid}/mode` key. `avg_raw_bytes` is measured live from real payloads, so the split tracks the actual byte rate, not a guess.
+The channel fills to `CLOUD_SATURATION` (default `0.8`, so 80%) of `BW_LIMIT_BYTES_S`. Older vehicles keep priority: the newest car is the first to go to EDGE when the channel is full, and it moves back to CLOUD when an older trip ends. Each change goes out on that vehicle's `core/fleet/{vid}/mode` key. `avg_raw_bytes` is measured from real payloads, so the split follows the actual byte rate.
 
-*Example (`BW_LIMIT_BYTES_S=3000`, `CLOUD_SATURATION=0.8`, `avg_raw≈248 B`):* up to ~9 vehicles stay CLOUD; with 15 active the split settles at **9 CLOUD + 6 EDGE** — `MODE reassign: 9 cloud + 6 edge (max_cloud=9, avg_raw=248B)`.
+Example with `BW_LIMIT_BYTES_S=3000`, `CLOUD_SATURATION=0.8` and `avg_raw≈248 B`: up to about 9 vehicles stay in CLOUD, so with 15 active cars the split is 9 CLOUD and 6 EDGE, logged as `MODE reassign: 9 cloud + 6 edge (max_cloud=9, avg_raw=248B)`.
 
-Energy saved is estimated as `bytes_saved / 1e6 × JOULES_PER_MB` against an all-CLOUD baseline — the headline metric for the Challenge 1 comparison, printed every `STATS_INTERVAL_S` seconds as a `[stats] cloud=… edge=… active=…` line. Everything is configurable via environment variables (`BW_LIMIT_BYTES_S`, `CLOUD_SATURATION`, `JOULES_PER_MB`).
+Energy saved is estimated as `bytes_saved / 1e6 × JOULES_PER_MB` against a fleet that is all CLOUD. This is the main number for the Challenge 1 comparison. The server prints it every `STATS_INTERVAL_S` seconds in a `[stats] cloud=… edge=… active=…` line. `BW_LIMIT_BYTES_S`, `CLOUD_SATURATION` and `JOULES_PER_MB` are environment variables.
 
-Two aggregation scopes are maintained per trip:
+Each trip keeps two aggregates:
 
-- a **rolling 15-second window** aggregate, transmitted and reset while the vehicle is in `EDGE` mode;
-- a **full-session** aggregate, accumulated for the whole trip and used for the end-of-trip ingest that feeds the driver/vehicle registries.
+- a 15-second window, sent and reset while the vehicle is in `EDGE` mode;
+- a whole-trip aggregate, used for the end-of-trip ingest that feeds the registries.
 
-With only a few cars the whole fleet stays **CLOUD** (live 1 Hz telemetry on the dashboard); lower `BW_LIMIT_BYTES_S`, raise `MAX_VEHICLES`, or let the built-in demand cycle (`DEMAND_PERIOD_S`) push more cars on the road to watch the hybrid split — and the bandwidth/energy drop — appear.
+With only a few cars the whole fleet stays in CLOUD and the dashboard shows 1 Hz telemetry. To see the split and the drop in bandwidth and energy, lower `BW_LIMIT_BYTES_S`, raise `MAX_VEHICLES`, or wait for the demand cycle (`DEMAND_PERIOD_S`) to put more cars on the road.
 
----
+## Telemetry data
 
-## 6. Telemetry Data Model
-
-### `raw` sample (CLOUD mode) — OBD2 PIDs + augmented GPS
+### `raw` sample (CLOUD mode): OBD2 PIDs and GPS
 
 | Field | Source | Unit |
 |---|---|---|
-| `vid`, `t` | — | id, seconds |
-| `did`, `driver_name`, `trip_id` | trip | driver (person) + trip id |
+| `vid`, `t` | | id, seconds |
+| `did`, `driver_name`, `trip_id` | trip | driver and trip id |
 | `speed_kmh` | PID 0x0D | km/h |
 | `rpm` | PID 0x0C | rpm |
 | `throttle` | PID 0x11 | % |
@@ -145,59 +124,53 @@ With only a few cars the whole fleet stays **CLOUD** (live 1 Hz telemetry on the
 | `coolant_c` | PID 0x05 | °C |
 | `fuel_lph` | PID 0x5E | L/h |
 | `lat`, `lon` | GPS | deg |
-| `limit_kmh` | map (augmented) | km/h |
+| `limit_kmh` | map data | km/h |
 
-The driver id/name ride on every sample so the server can serve **who is driving now** live (see `/report/api/active`).
+The driver id and name are on every sample, so the server can tell who is driving right now (see `/report/api/active`).
 
-### `summary` aggregate (EDGE window / end-of-trip session)
+### `summary` aggregate (EDGE window or end-of-trip session)
 
-Distance, duration, average & max speed, average rpm, fuel used, L/100 km, and **driving-quality counters**: harsh accelerations, harsh braking, over-rev seconds, cold-engine over-rev seconds, idle seconds, speeding seconds.
+Distance, duration, average and maximum speed, average rpm, fuel used, L/100 km, and driving counters: harsh accelerations, harsh braking, seconds over the rev limit, seconds over the rev limit with a cold engine, idle seconds and speeding seconds.
 
-The final `session` payload additionally carries the driver's anagrafica (`driver_surname`, `driver_cf`, `driver_nationality`) and a **vehicle snapshot** (`odo_km`, `fuel_pct`, `oil_pct`, `lights`) — the fields the registries are built from.
+The counters use physical thresholds (see `fleet_simulator/config.py`), so the scores come from the signals and the LLM never invents numbers. Speeding always lowers the safety score, but a fine (multa) is only recorded when the speeding lasts long enough and gets caught (`FINE_MIN_SPEEDING_S`, `FINE_CATCH_RATE`).
 
-These counters are derived from physically-grounded thresholds (see `fleet_simulator/config.py`) so the downstream scores rest on real signals rather than on the LLM inventing numbers. Speeding still lowers the safety score, but a **multa** (fine) is only recorded for *sustained* speeding that gets *caught* (`FINE_MIN_SPEEDING_S`, `FINE_CATCH_RATE`).
+### Where the features are computed
 
-**Where the features are computed** — this is the concrete cloud-vs-edge trade-off. In **CLOUD** the device ships raw 1 Hz telemetry and the **server** derives every feature itself (`corefleet/aggregate.py` → `ServerTripAggregator`), including acceleration as `Δspeed/Δt` for harsh-event detection. In **EDGE** the device computes the features on-board and the server just **folds** the window aggregates in. Either way the server owns one complete per-trip aggregate and scores *that* — so the trip score is authoritative regardless of mode; only the *location of the computation* (and the bytes on the wire) changes. Each trip records its provenance (`stats_by`: `server-cloud` / `server-mixed` / `edge`). Deriving from a 1 Hz feed is coarser than the device's full-rate signal, so cloud-side harsh counts can slightly under-count sub-second spikes — the honest fidelity cost of moving computation off the edge.
+This is the cloud and edge trade-off in practice. In CLOUD the device sends raw 1 Hz telemetry and the server computes every feature (`ServerTripAggregator` in `corefleet/aggregate.py`), including acceleration as `Δspeed/Δt` for harsh events. In EDGE the device computes the features and the server adds the window aggregates together. Either way the server holds one aggregate per trip and scores it, so the score does not depend on the mode. Only where the computation runs changes, and how many bytes travel. Each trip records where its stats came from (`stats_by`: `server-cloud`, `server-mixed` or `edge`). A 1 Hz feed is coarser than the device's own signal, so the server can miss some harsh spikes shorter than a second. That is the cost of moving computation off the edge.
 
----
+## Cars, drivers and trips
 
-## 7. Cars, Drivers & Trips
+- Cars are company assets. The fleet starts with a batch of cars and grows during the run. Odometer, fuel and oil levels and warning lights carry over between trips, and the depot refuels or services a car when it runs low.
+- Drivers are people, and they come and go. New customers keep arriving, and a satisfied driver may come back for another trip. A driver who got a car back with warning lights on is less likely to return. Returning drivers take different cars. Each driver has personal data (nome, cognome, codice fiscale, nazionalità) and a baseline driving style. `RECONFIRM_RATE` and `SATISFACTION_RATE` control the churn.
+- A trip is one driver taking a free car for a drive of limited length. When it ends, both go back to their pools.
 
-CoreFleet models the business literally:
+The OBD2 device sits in the car, but scores and reports are about the driver, because insurance and coaching follow the person.
 
-- **Cars** are assets. The fleet starts with a batch and grows over the run. A car has an odometer, fuel and oil levels and warning lights that **persist across trips** (and is refuelled/serviced at the depot when low).
-- **Drivers** are people, and they **churn**: new customers arrive continuously, and a satisfied one may **reconfirm** for a later trip (a bad experience — the car handed back with warning lights — makes them less likely to return). A returning driver rotates across different cars. Each driver has an anagrafica (nome, cognome, codice fiscale, nazionalità) and a baseline driving style. Tuned by `RECONFIRM_RATE` / `SATISFACTION_RATE`.
-- A **trip** = a driver taking an available car for a finite drive. On end, both return to their pools; the same driver may later take another car.
+## Registries and driver reports (Challenge 3: Jakarta EE + LLM)
 
-The OBD2 device lives on the **car** (it is the telemetry source), but scoring and reporting are about the **driver** — that's the real product value (insurance/coaching follow the person).
-
-## 8. Registries & Driver Reports (Challenge 3: Jakarta EE + LLM)
-
-The Jakarta service (`report-service/`, Open Liberty + langchain4j, built from the Eclipse [`hourglass-template`](https://gitlab.eclipse.org/eclipse-research-labs/o-cei-project/challenge-3-jakarta-ee-hourglass/hourglass-template)) is the **platform API**. Each finished trip is **ingested** (no LLM); reports are generated **on demand, per driver, and cached**.
+The Jakarta service (`report-service/`, Open Liberty and langchain4j, based on the Eclipse [`hourglass-template`](https://gitlab.eclipse.org/eclipse-research-labs/o-cei-project/challenge-3-jakarta-ee-hourglass/hourglass-template)) is the platform API. Every finished trip is ingested without calling the LLM. Reports are generated per driver when someone asks for one, then cached.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/report/api/trips` | Ingest a finished trip → update driver + vehicle stats. No LLM. |
-| `POST`/`GET` | `/report/api/active` | Live "who is driving now" **+ live telemetry** (speed, rpm, throttle, fuel, position) per vehicle; pushed by the server every ~2s, read by the dashboard. |
-| `GET`  | `/report/api/vehicles` · `/vehicles/{vid}` | Vehicle registry: km totali, n° trip, carburante/olio, spie, ultimi conducenti. |
-| `GET`  | `/report/api/drivers` · `/drivers/{did}` | Driver registry: anagrafica, viaggi, km, multe/infrazioni, medie, recidivo. |
-| `POST` | `/report/api/drivers/{did}/report` | Generate (or return **cached**) the driver's LLM report. Returns the prose fast; kicks off the image job in the background. |
-| `GET`  | `/report/api/drivers/{did}/report/image` | Poll the driver's generated **Hourglass image** → `{status: pending\|ready, imageUrl}`. |
-| `GET`  | `/report/api/report` | History of generated reports. |
+| `POST` | `/report/api/trips` | Ingest a finished trip and update driver and vehicle stats. No LLM call. |
+| `POST`/`GET` | `/report/api/active` | Who is driving now, with live telemetry per vehicle (speed, rpm, throttle, fuel, position). The server pushes it every ~2 s and the dashboard reads it. |
+| `GET` | `/report/api/vehicles` · `/vehicles/{vid}` | Vehicle registry: total km, number of trips, fuel and oil, warning lights, last drivers. |
+| `GET` | `/report/api/drivers` · `/drivers/{did}` | Driver registry: personal data, trips, km, fines and infractions, averages, repeat offences. |
+| `POST` | `/report/api/drivers/{did}/report` | Generate the driver's LLM report, or return the cached one. Returns the text right away and starts the image job in the background. |
+| `GET` | `/report/api/drivers/{did}/report/image` | Poll the driver's Hourglass image: `{status: pending\|ready, imageUrl}`. |
+| `GET` | `/report/api/report` | History of generated reports. |
 | `POST` | `/report/api/hourglass/analyze` | The template's generic Hourglass mapping (`{domain, useCase}`). |
-| `GET`  | `/report/api/status` | Health + configured model (no secrets). |
+| `GET` | `/report/api/status` | Health and configured model (no secrets). |
 
-**Caching**: a driver's report is regenerated only when their data changed since last time — the cache key is a hash of `trips + km + infractions + average scores`. Identical data ⇒ the stored report is returned with `cached: true` and **no LLM call**.
+A driver's report is regenerated only when their data changed. The cache key is a hash of trips, km, infractions and average scores. If nothing changed, the stored report comes back with `cached: true` and no LLM call.
 
-**Deterministic vs narrative**: the platform owns the numbers (scores, counts, recidivist behaviours, trend, grade); the **LLM only writes the prose** and the Hourglass mapping (stakeholders / capabilities-waist / standards groups). Reproducible and easy to defend. A **multa** additionally applies a fixed safety-score penalty (`REPORT_FINE_SAFETY_PENALTY`, default 25) — a deterministic hit, not an LLM opinion.
+The platform computes the numbers: scores, counts, repeat behaviours, trend and grade. The LLM writes the prose and the Hourglass mapping (stakeholders, capabilities waist, standards groups), so the same data always gives the same scores. A fine also takes a fixed amount off the safety score (`REPORT_FINE_SAFETY_PENALTY`, default 25).
 
-**Async Hourglass image**: alongside the report the service generates a per-driver illustrative image via the OpenAI **Responses API** `image_generation` tool (`OPENAI_IMAGE_MODEL`, default `gpt-5-mini`). Image generation is slow (~30–60 s), so `POST …/report` returns the prose immediately and submits the image on a background executor; the dashboard shows a spinner and polls `…/report/image` until it returns `status: ready` with a `data:image/png;base64,…` URL. The call goes over a raw `HttpClient` pinned to **HTTP/1.1** (OpenJ9 HTTP/2 hangs) and is idempotent per driver.
+Next to the report, the service generates an image for each driver with the `image_generation` tool of the OpenAI Responses API (`OPENAI_IMAGE_MODEL`, default `gpt-5-mini`). It takes 30 to 60 seconds, so `POST …/report` returns the text at once and runs the image on a background executor. The dashboard shows a spinner and polls `…/report/image` until it gets `status: ready` with a `data:image/png;base64,…` URL. The call uses a plain `HttpClient` forced to HTTP/1.1, because HTTP/2 hangs on OpenJ9. Asking twice for the same driver does not start a second job.
 
-The OpenAI key is read from the **`OPENAI_API_KEY`** environment variable (via a gitignored `.env`); it is never committed. See `report-service/README.md`.
+The OpenAI key comes from the `OPENAI_API_KEY` environment variable, set in a `.env` file that git ignores. See `report-service/README.md`.
 
----
-
-## 9. Repository Structure
+## Repository layout
 
 ```
 .
@@ -227,77 +200,53 @@ The OpenAI key is read from the **`OPENAI_API_KEY`** environment variable (via a
 └── README.md
 ```
 
----
+## Getting started
 
-## 10. Getting Started
+You need Docker with Docker Compose. To run the Python parts outside Docker you also need Python 3.10+ and `pip install -r requirements.txt`.
 
-### Prerequisites
-- Docker + Docker Compose (Python 3.13 / Java 17 images)
-- Or, for local runs: Python 3.10+ and `pip install -r requirements.txt`
+### Full stack
 
-### Full stack (recommended)
-
-Provide your OpenAI key for the report service (kept out of git):
+Put your OpenAI key in `.env` for the report service:
 
 ```bash
 cp .env.example .env        # then edit .env and set OPENAI_API_KEY
 docker compose up --build
 ```
 
-This brings up the router, fleet server, simulator, **report service** and
-**dashboard**. The simulator starts with a batch of cars and grows the fleet;
-new customers arrive continuously and take cars for finite trips. Watch the
-`fleet-server` logs for the bandwidth/energy `[stats]` lines and `trip … ingested`
-lines — each finished trip updates the driver/vehicle registries. Open the
-dashboard: the **Veicoli** tab shows a running trip's **live telemetry**, and on the
-**Drivers** tab you can pick a driver and press **Genera report**.
+This starts the router, fleet server, simulator, report service and dashboard. The simulator starts with a batch of cars and adds more over time, while new customers take cars for trips. The `fleet-server` logs show the `[stats]` lines with bandwidth and energy, and a `trip … ingested` line for every finished trip. In the dashboard, the Veicoli tab shows live telemetry for running trips, and in the Drivers tab you can pick a driver and press "Genera report".
 
-- Dashboard: **http://localhost:8080**
-- Report service: **http://localhost:9080/report/api/status**
-- Live "who's driving now": `…/report/api/active` · Drivers / Vehicles: `…/report/api/drivers` · `…/report/api/vehicles`
-- Router REST: **http://localhost:8000** (`core/fleet/**`)
+- Dashboard: http://localhost:8080
+- Report service: http://localhost:9080/report/api/status
+- Who is driving now: `…/report/api/active`. Drivers and vehicles: `…/report/api/drivers`, `…/report/api/vehicles`
+- Router REST: http://localhost:8000 (`core/fleet/**`)
 
-With a few cars the whole fleet runs in **CLOUD**, so the dashboard shows live 1 Hz
-telemetry (speed/rpm/throttle/fuel) for a running trip. As more cars come on the road
-(raise `MAX_VEHICLES`, or wait for the demand cycle peak) the channel saturates and the
-newest vehicles are pushed to **EDGE** — you'll see `MODE reassign: N cloud + M edge`
-in the logs, the `[stats] cloud=… edge=…` split, the bandwidth/energy drop, and those
-cars' telemetry become coarser (15 s window aggregates). Lower `BW_LIMIT_BYTES_S`
-(e.g. `1800`) or `CLOUD_SATURATION` to force the split with fewer cars.
+With few cars the whole fleet runs in CLOUD and the dashboard shows 1 Hz telemetry (speed, rpm, throttle, fuel). As more cars hit the road (raise `MAX_VEHICLES` or wait for the demand peak) the channel fills and the newest cars go to EDGE. The logs then show `MODE reassign: N cloud + M edge` and the `[stats] cloud=… edge=…` split, bandwidth and energy drop, and those cars' telemetry turns into 15-second aggregates. To force the split with fewer cars, lower `BW_LIMIT_BYTES_S` (for example to `1800`) or `CLOUD_SATURATION`.
 
-Tunables live in `docker-compose.yaml`: `START_VEHICLES`, `MAX_VEHICLES`,
-`SPAWN_INTERVAL_S`, `TRIP_MIN_S`/`TRIP_MAX_S`, `RECONFIRM_RATE`,
-`SATISFACTION_RATE`, `DEMAND_PERIOD_S`, `DEMAND_MIN`, `DURATION_S` (simulator);
-`BW_LIMIT_BYTES_S`, `CLOUD_SATURATION`, `JOULES_PER_MB`, `FINE_MIN_SPEEDING_S`,
-`FINE_CATCH_RATE`, `ACTIVE_INTERVAL_S`, `STATS_INTERVAL_S` (server);
-`OPENAI_MODEL_NAME`, `OPENAI_IMAGE_MODEL`, `REPORT_FINE_SAFETY_PENALTY` (report).
+Settings live in `docker-compose.yaml`:
 
-### Distributed deployment (split across machines)
+- simulator: `START_VEHICLES`, `MAX_VEHICLES`, `SPAWN_INTERVAL_S`, `TRIP_MIN_S`/`TRIP_MAX_S`, `RECONFIRM_RATE`, `SATISFACTION_RATE`, `DEMAND_PERIOD_S`, `DEMAND_MIN`, `DURATION_S`
+- server: `BW_LIMIT_BYTES_S`, `CLOUD_SATURATION`, `JOULES_PER_MB`, `FINE_MIN_SPEEDING_S`, `FINE_CATCH_RATE`, `ACTIVE_INTERVAL_S`, `STATS_INTERVAL_S`
+- report service: `OPENAI_MODEL_NAME`, `OPENAI_IMAGE_MODEL`, `REPORT_FINE_SAFETY_PENALTY`
 
-The stack also runs **spread over several PCs** — the Challenge 1 "continuum" story. No
-host or IP is hardcoded in source: every cross-service URL in `docker-compose.yaml` is a
-`${VAR:-default}` that falls back to a compose service name on a single host. To split,
-copy the file to each machine, set the peers' IPs in a `.env` (see `.env.example`), and
-start only the services that live there:
+### Across several machines
+
+The stack can run spread over several PCs, which is the "continuum" part of Challenge 1. The source code has no hardcoded hosts or IPs: every URL between services in `docker-compose.yaml` is a `${VAR:-default}` that falls back to a compose service name on a single host. To split it, copy the file to each machine, set the other machines' IPs in a `.env` (see `.env.example`), and start only the services that run there:
 
 ```bash
-# Laptop B — Zenoh router
+# Laptop B: Zenoh router
 docker compose up zenoh-router
 
-# Laptop A — simulator (points at B)
+# Laptop A: simulator (points at B)
 ZENOH_ROUTER=tcp/<B-IP>:7447 docker compose up fleet-simulator
 
-# Laptop C — backend + UI (point at B)
+# Laptop C: backend + UI (point at B)
 ZENOH_ROUTER=tcp/<B-IP>:7447 ZENOH_REST_URL=http://<B-IP>:8000 \
   docker compose up fleet-server fleet-report fleet-webapp
 ```
 
-The browser always talks to the webapp's own **nginx**, which reverse-proxies
-`/report-api` → the report service and the Zenoh REST endpoint (upstreams injected via
-`REPORT_SERVICE_URL` / `ZENOH_REST_URL` with `envsubst`), so the frontend has no backend
-host baked into the bundle and works identically on one host or many.
+The browser only talks to the webapp's nginx. It proxies `/report-api` to the report service and also proxies the Zenoh REST endpoint, with the upstreams set from `REPORT_SERVICE_URL` and `ZENOH_REST_URL` through `envsubst`. The frontend bundle contains no backend host, so the same build works on one machine or many.
 
-### Run components locally
+### Running components locally
 
 ```bash
 python -m venv .venv && source .venv/bin/activate   # fish: source .venv/bin/activate.fish
@@ -313,54 +262,52 @@ ZENOH_ROUTER=tcp/localhost:7447 PYTHONPATH=. python zenoh_router/subscriber/flee
 ZENOH_ROUTER=tcp/localhost:7447 python -m fleet_simulator
 ```
 
----
+## Roadmap
 
-## 11. Roadmap
+- [x] Simulator over Zenoh: liveliness, `mode` query and subscribe, `raw`/`summary`/`session` publish.
+- [x] Fleet server: wildcard subscriptions, per-vehicle CLOUD/EDGE control (fill to `CLOUD_SATURATION`, overflow to EDGE), per-vehicle mode queryable, trip scoring and ingest, bandwidth and energy stats.
+- [x] Cars, drivers and trips: car pool, driver churn (new customers and returning ones), trips of limited length, drivers moving between cars, fuel, oil, odometer and lights per car.
+- [x] Live telemetry: who is driving now, with speed, rpm, throttle and fuel for each running trip; links between vehicles and drivers.
+- [x] Jakarta registries and reports: vehicle and driver stats, cached driver reports, history, Hourglass mapping (langchain4j and OpenAI).
+- [x] Hourglass image per driver, generated in the background with the OpenAI Responses `image_generation` tool and polled by the dashboard.
+- [x] Deployment across machines through `.env` IP overrides and the webapp's nginx proxy.
+- [x] Vue 3 dashboard: Dashboard, Veicoli (live trip), Drivers (with "Genera report"), Reports history.
+- [x] Full Docker stack: router, server, simulator, report service and dashboard.
+- [ ] Live map with fleet positions from `lat`/`lon` (Leaflet or MapLibre).
+- [ ] Persistence, so registries and reports survive a restart (they are in memory today).
+- [ ] CBOR or protobuf encoding to measure the bandwidth difference.
 
-- [x] **Simulator over Zenoh** — liveliness, `mode` query/subscribe, `raw`/`summary`/`session` publish.
-- [x] **Fleet server / controller** — wildcard subs, **per-vehicle hybrid** CLOUD/EDGE control (fill to `CLOUD_SATURATION`, overflow → EDGE), per-vehicle mode queryable, per-trip scoring + ingest, bandwidth/energy stats.
-- [x] **Cars + drivers + trips** — asset pool, driver **churn** (new customers + reconfirms), finite trips, drivers rotating across cars, per-car fuel/oil/odometer/lights.
-- [x] **Live telemetry** — "who's driving now" + speed/rpm/throttle/fuel per running trip; cross-links between vehicles ↔ drivers.
-- [x] **Jakarta registries + reports** — vehicle & driver stats, on-demand **cached** driver reports, history, Hourglass mapping (langchain4j + OpenAI).
-- [x] **Async Hourglass image** — per-driver illustrative image via the OpenAI Responses `image_generation` tool, generated on a background executor and polled by the dashboard.
-- [x] **Distributed deployment** — split across machines via `.env` IP overrides + webapp nginx reverse-proxy, no host baked into source.
-- [x] **Vue 3 dashboard** — Dashboard, Veicoli (live trip), Drivers (with "Genera report"), Reports history.
-- [x] **Full Docker stack** — router + server + simulator + report service + dashboard.
-- [ ] **Live map** — fleet positions from `lat`/`lon` (Leaflet/MapLibre).
-- [ ] **Persistence** — registries + reports survive a restart (currently in-memory).
-- [ ] **Compact encoding** — CBOR/protobuf variant to measure the real bandwidth win.
+## Appendix: the hackathon challenges
 
----
+The text below is quoted from the event brief.
 
-## Appendix — Hackathon Challenges
-
-### CEI-Sphere Hackathon — Code the Continuum
+### CEI-Sphere Hackathon: Code the Continuum
 
 > Code the Continuum brings together students, developers, researchers, innovators, open-source communities, pilot teams and solution providers for two days of hands-on collaboration around the cloud-edge-IoT continuum.
 >
 > The event creates a practical space for experimentation, co-creation and exchange, where participants will work on real challenges related to open technologies, interoperability and the reuse of assets across large-scale pilot environments.
 
-#### First Challenge - O-CEI: Eclipse Zenoh & Sustainable Edge-Cloud
+#### Challenge 1, O-CEI: Eclipse Zenoh and sustainable edge-cloud
 
 > Participants will explore how Eclipse Zenoh can support energy-aware edge-cloud applications by comparing "cloud-only" and "edge-accelerated" deployments. Through hands-on experimentation, they will measure how optimising data flows across the continuum can reduce bandwidth usage and contribute to lower energy consumption.
 
-- **Concrete scenarios**:
-  + **Challenge 1.A**: Distributed image processing with Zenoh, comparing cloud vs edge execution.
-  + **Challenge 1.B**: Geo-distributed content delivery using Zenoh and SkyFlok, comparing traffic across edge and cloud.
-- **Task**: Install Zenoh client libraries (e.g. Python or Rust), run demo repositories, adapt them with your own data, and compare edge vs cloud configurations.
-- **Inputs**: Example source code and demo repositories (GitHub).
-- **Expected demo (Definition of Done)**: At least one scenario running successfully, with visible Zenoh message exchanges and a short explanation of results.
-- **Skills**: Programming (Python, Rust, C/C++), basic networking and distributed systems knowledge.
-- **Requirements**: Laptop (Windows, Ubuntu or macOS) capable of running Zenoh demos and installing development tools.
-- **Mentors**: Software engineers from ZettaScale.
+- Scenarios:
+  - Challenge 1.A: distributed image processing with Zenoh, comparing cloud and edge execution.
+  - Challenge 1.B: geo-distributed content delivery with Zenoh and SkyFlok, comparing traffic across edge and cloud.
+- Task: install the Zenoh client libraries (for example Python or Rust), run the demo repositories, adapt them with your own data, and compare edge and cloud configurations.
+- Inputs: example source code and demo repositories (GitHub).
+- Definition of done: at least one scenario running, with visible Zenoh message exchanges and a short explanation of the results.
+- Skills: programming (Python, Rust, C/C++), basic networking and distributed systems.
+- Requirements: a laptop (Windows, Ubuntu or macOS) that can run the Zenoh demos and install development tools.
+- Mentors: software engineers from ZettaScale.
 
-#### Third Challenge - ECLIPSE FOUNDATION: Jakarta EE, AI & the Hourglass Model
+#### Challenge 3, Eclipse Foundation: Jakarta EE, AI and the Hourglass Model
 
 > Proposed by the Eclipse Foundation, this challenge invites participants to design and implement a Jakarta EE application that models and analyses enterprise domains using the [Hourglass Model](https://ceisphere.eu/hourglass-model). The mapping will be supported by an external Large Language Model (LLM), integrated through modern AI engineering and agentic techniques.
 
-- **Concrete scenario**: Generate the Hourglass Model for a given domain and use case.
-- **Task**: Design and implement a Jakarta EE application that models and analyses enterprise domains using the Hourglass Model, supported by an external LLM and agentic tools.
-- **Inputs**: Skeleton project, OpenAI API key, starter guides and links to relevant resources.
-- **Expected demo (Definition of Done)**: A complete, runnable Jakarta EE project.
-- **Skills**: Java, Maven and general knowledge of agentic AI techniques.
-- **Mentor**: Ivar Grimstad, Jakarta EE Developer Advocate, Eclipse Foundation.
+- Scenario: generate the Hourglass Model for a given domain and use case.
+- Task: design and implement a Jakarta EE application that models and analyses enterprise domains using the Hourglass Model, supported by an external LLM and agentic tools.
+- Inputs: skeleton project, OpenAI API key, starter guides and links to resources.
+- Definition of done: a complete, runnable Jakarta EE project.
+- Skills: Java, Maven and general knowledge of agentic AI techniques.
+- Mentor: Ivar Grimstad, Jakarta EE Developer Advocate, Eclipse Foundation.

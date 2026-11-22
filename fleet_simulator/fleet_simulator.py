@@ -3,15 +3,15 @@ Fleet runner.
 
 Models a car-sharing operation:
 
-  * a pool of **cars** (assets) that grows over the simulation;
-  * a pool of **drivers** (people), each with a baseline driving style;
-  * **trips**: a driver takes an available car for a finite trip, then returns
-    it; the same driver may later take another car (or the same one).
+  * a pool of cars that grows during the simulation;
+  * a pool of drivers, each with a baseline driving style;
+  * trips: a driver takes a free car for a limited time, then returns it. The
+    same driver may later take another car, or the same one.
 
-Each active trip runs as an independent :class:`VehicleAgent` streaming telemetry
-to Zenoh. When a trip ends the car and driver return to their pools, and the
-session is published (tagged with the driver) so the server can build a
-driver-centric report and track behaviour across that driver's trips.
+Each active trip is a :class:`VehicleAgent` that streams telemetry to Zenoh.
+When a trip ends, the car and the driver go back to their pools and the session
+is published with the driver attached, so the server can track each driver
+across trips.
 """
 import logging
 import math
@@ -71,8 +71,8 @@ class Car:
 
 
 def _jitter_profile(p) -> object:
-    """A per-trip variation of a driver's baseline style, so successive trips
-    differ and trends (improved / worsened) actually emerge."""
+    """Varies a driver's baseline style for one trip, so trips differ and the
+    reports can show a driver getting better or worse."""
     def s(x, lo, hi):
         return max(lo, min(hi, x * random.uniform(0.82, 1.18)))
     return replace(
@@ -115,9 +115,9 @@ class FleetSimulator:
         self.reconfirm_rate = reconfirm_rate
         # chance a driver is happy with the trip and may come back
         self.satisfaction_rate = satisfaction_rate
-        # demand cycle: how many cars are out varies over time (rush hours vs
-        # quiet), so the offered traffic rises and falls and the server's
-        # CLOUD<->EDGE switch actually alternates
+        # demand cycle: the number of cars on the road rises and falls (rush
+        # hour, quiet hours), so traffic changes and the server keeps moving
+        # vehicles between CLOUD and EDGE
         self.demand_period_s = demand_period_s
         self.demand_min = demand_min
 
@@ -150,9 +150,9 @@ class FleetSimulator:
         return driver
 
     def _pick_driver(self, exclude_last_vid: str | None = None) -> Driver:
-        """A returning satisfied customer (sometimes) or a new one. A returning
-        driver is only reused if they did NOT last drive `exclude_last_vid`, so a
-        car is never immediately handed back to the driver who just dropped it."""
+        """A returning satisfied customer or, otherwise, a new one. A returning
+        driver is skipped if their last car was `exclude_last_vid`, so nobody
+        gets back the car they just returned."""
         if self.idle_returning and random.random() < self.reconfirm_rate:
             cands = [d for d in self.idle_returning if self.last_car.get(d) != exclude_last_vid]
             if cands:

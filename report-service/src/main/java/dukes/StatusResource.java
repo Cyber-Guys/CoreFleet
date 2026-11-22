@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet, based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes;
 
@@ -12,8 +12,8 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-/** Health/readiness probe. Reports the configured model and whether a key is set
- *  — never the key itself. */
+/** Health check. Reports the configured model and whether a key is set, but
+ *  not the key itself. */
 @Path("/status")
 public class StatusResource {
 

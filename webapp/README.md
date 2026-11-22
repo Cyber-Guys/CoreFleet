@@ -1,18 +1,20 @@
-# CoreFleet — Dashboard
+# CoreFleet dashboard
 
-Fleet operations console for **CoreFleet**. Vue 3 (Composition API, `<script setup>`),
-vue-router, Chart.js. Cyber/Tech control-room UI with five tabs: **Dashboard**
-(active count, CLOUD/EDGE status, Cloud-vs-Edge chart, connected vehicles + live
-speed), **Veicoli** (registry + a running trip's live telemetry), **Drivers**
-(registry + "Genera report"), **Reports** (history), **About**.
+Operations console for CoreFleet, built with Vue 3 (Composition API, `<script setup>`), vue-router and Chart.js. It has five tabs:
+
+- Dashboard: active vehicles, CLOUD/EDGE status, Cloud vs Edge chart, connected vehicles with live speed
+- Veicoli: vehicle registry and live telemetry of running trips
+- Drivers: driver registry and the "Genera report" button
+- Reports: report history
+- About
 
 ## Stack
 
-- **Vue 3** + Vite, `<script setup>` everywhere
-- **vue-router** — Dashboard · Veicoli · Drivers · Reports · About
-- **Chart.js** — doughnut (Cloud = orange, Edge = purple)
-- Scoped CSS, design tokens in `src/assets/styles/theme.css`
-- Type: Chakra Petch (display) · Inter (body) · JetBrains Mono (plates/telemetry)
+- Vue 3 with Vite, `<script setup>` in every component
+- vue-router for the five tabs
+- Chart.js for the doughnut chart (Cloud orange, Edge purple)
+- Scoped CSS, with design tokens in `src/assets/styles/theme.css`
+- Fonts: Chakra Petch for headings, Inter for body text, JetBrains Mono for plates and telemetry
 
 ## Run locally
 
@@ -29,9 +31,7 @@ docker build -t corefleet-dashboard .
 docker run -p 8080:80 corefleet-dashboard      # http://localhost:8080
 ```
 
-Or via the repository's top-level stack (`docker compose up --build`), which also
-starts the Zenoh router, fleet server and simulator. The dashboard is served at
-**http://localhost:8080**.
+You can also start it with the whole stack from the repository root (`docker compose up --build`), which also runs the Zenoh router, fleet server, simulator and report service. The dashboard is at http://localhost:8080.
 
 ## Structure
 
@@ -41,44 +41,32 @@ src/
 ├── App.vue                 # shell: sidebar + topbar (search) + router-view
 ├── router/index.js         # Dashboard / Veicoli / Drivers / Reports / About routes
 ├── assets/styles/theme.css # design tokens, base, shared glow/pulse keyframes
-├── data/mockData.js        # mock snapshot for the Dashboard KPI widgets
 ├── services/fleetApi.js    # API client: getActive/getVehicles/getDrivers/getReports/…
-├── composables/useFleet.js # singleton store: mock KPIs + shared search query
+├── composables/useFleet.js # shared store: live fleet data + search query
 ├── components/
 │   ├── AppSidebar.vue
 │   ├── AppSearchBar.vue
 │   ├── DriverReportCard.vue # renders a generated DriverReport (Drivers + Reports)
 │   ├── ui/                 # BaseWidget, StatusDot, AppIcon
-│   └── widgets/            # ActiveVehicles, Status, ModeChart, VehicleList (live)
-└── views/                  # DashboardView, VehiclesView, DriversView, ReportsView, AboutView
+│   └── widgets/            # ActiveVehicles, Status, ModeChart, VehicleList
+└── views/                  # DashboardView, VehiclesView, DriversView, ReportsView, NetworkAnalysisView, AboutView
 ```
 
-## Data sources
+## Data
 
-- The **Dashboard** headline widgets (active count, CLOUD/EDGE status, Cloud-vs-Edge
-  chart) run on a **mock store** (`useFleet` / `mockData.js`) for a lively feel.
-- Everything else is **live** from the Jakarta service (`VITE_REPORT_API_URL`,
-  default `http://localhost:9080`): connected vehicles + live telemetry
-  (`/report/api/active`), registries (`/vehicles`, `/drivers`), on-demand reports
-  (`/drivers/{did}/report`) and history (`/report`).
+All data comes from the Jakarta report service: connected vehicles and live telemetry (`/report/api/active`), registries (`/vehicles`, `/drivers`), reports (`/drivers/{did}/report`) and history (`/report`).
 
-In Docker set `VITE_REPORT_API_URL=/report-api` to use the bundled nginx proxy.
-`fleetApi.getSnapshot()` still has a stubbed `adaptZenoh()` for reading live fleet
-state straight from the Zenoh router REST — an optional future path.
+The app calls `/report-api` on its own origin. In Docker, nginx forwards it to the report service; with `npm run dev`, the Vite dev server does (`VITE_DEV_REPORT_URL`, see `.env.example`). Set `VITE_REPORT_API_URL` at build time only if the browser should call the report service at another URL.
 
-## Navigation & search
+## Navigation and search
 
-Detail selection is URL-addressable (`/vehicles?vid=…`, `/drivers?did=…`), so the
-tabs cross-link: a vehicle's recent drivers → that driver, a driver's cars used →
-that vehicle, a Dashboard row → that vehicle. The topbar search filters the current
-tab (plate / driver name / id); no match shows **“Nessun risultato trovato.”**
+The selected vehicle or driver is in the URL (`/vehicles?vid=…`, `/drivers?did=…`), so the tabs link to each other: from a vehicle's recent drivers to that driver, from a driver's cars to that vehicle, from a Dashboard row to that vehicle. The search bar filters the current tab by plate, driver name or id. With no match it shows "Nessun risultato trovato."
 
-## Accessibility / quality floor
+## Accessibility
 
-Responsive to mobile (sidebar collapses to an icon rail), visible keyboard focus,
-`prefers-reduced-motion` respected, semantic landmarks.
+The layout works on mobile (the sidebar collapses to icons), keyboard focus is visible, `prefers-reduced-motion` is respected and the page uses semantic landmarks.
 
 ## Next
 
-- Live map (Leaflet/MapLibre) from the `lat`/`lon` in `/report/api/active`.
-- Persist registries/reports (currently in-memory in the service).
+- Live map (Leaflet or MapLibre) from the `lat`/`lon` in `/report/api/active`.
+- Persist registries and reports (the service keeps them in memory today).

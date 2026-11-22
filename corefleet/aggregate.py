@@ -1,17 +1,16 @@
 """
 Server-side trip aggregator.
 
-In CLOUD mode the device streams raw 1 Hz telemetry and the *server* must derive
-the driving features itself (this module) — the cloud does the work. In EDGE mode
-the raw stream stops and the device sends pre-computed window aggregates instead;
-those are *folded* in here so the trip aggregate stays complete across mode
-switches. The server is therefore the single source of truth for the trip score,
-and the difference between CLOUD and EDGE is only *where* the features are
-computed (server vs device) and *how many bytes* crossed the link.
+In CLOUD mode the device streams raw 1 Hz telemetry and this module computes
+the driving features on the server. In EDGE mode the raw stream stops and the
+device sends window aggregates it computed itself; they are added in here, so
+the trip aggregate stays complete when a vehicle changes mode. The trip score
+always comes from the server. CLOUD and EDGE differ only in where the features
+are computed (server or device) and how many bytes cross the link.
 
-The output of :meth:`ServerTripAggregator.result` matches the shape produced by
-the edge device's ``EdgeAggregate.summary_dict`` (fleet_simulator), so it can
-override the session payload's feature fields transparently.
+:meth:`ServerTripAggregator.result` returns the same fields as the device's
+``EdgeAggregate.summary_dict`` (fleet_simulator), so its output can replace the
+feature fields of the session payload as they are.
 
 Thresholds mirror ``fleet_simulator/config.py`` (kept in sync by hand).
 """
@@ -35,12 +34,12 @@ FEATURE_KEYS = (
 class ServerTripAggregator:
     """Accumulates one trip's driving features on the server side.
 
-    * :meth:`add_raw` — CLOUD path: derive features from a 1 Hz raw sample,
-      including acceleration as ``Δspeed/Δt`` for harsh-event detection.
-    * :meth:`fold_summary` — EDGE path: fold a pre-computed window aggregate.
+    * :meth:`add_raw` (CLOUD): computes features from a 1 Hz raw sample,
+      including acceleration as ``Δspeed/Δt`` to detect harsh events.
+    * :meth:`fold_summary` (EDGE): adds a window aggregate computed on the device.
 
-    Accumulation is time-weighted (``dt``-based), so raw ticks and folded EDGE
-    windows combine into one consistent full-trip aggregate.
+    Values are weighted by ``dt``, so raw ticks and EDGE windows add up to one
+    aggregate for the whole trip.
     """
 
     def __init__(self, trip_id: str | None = None) -> None:
@@ -101,11 +100,9 @@ class ServerTripAggregator:
         if limit_kmh > 0 and speed_kmh > limit_kmh * 1.05:
             self.speeding_s += dt
 
-        # Acceleration derived on the server as Δspeed/Δt (cloud-side derivation).
-        # NB: from a 1 Hz raw feed the server sees a coarser signal than the edge
-        # device (which samples at the full sim rate), so sub-second harsh spikes
-        # may be under-counted — the honest fidelity cost of deriving in the cloud
-        # from downsampled telemetry.
+        # Acceleration computed on the server as Δspeed/Δt. A 1 Hz feed is
+        # coarser than what the device samples, so harsh spikes shorter than a
+        # second can be missed here.
         if self._prev_speed_ms is not None:
             accel = (speed_ms - self._prev_speed_ms) / dt
             if accel > HARSH_ACCEL_MS2 and not self._was_harsh_accel:
@@ -147,7 +144,7 @@ class ServerTripAggregator:
         return self.duration_s > 0.0
 
     def provenance(self) -> str:
-        """Where this trip's stats came from: server-derived, edge-folded, or a mix."""
+        """Where this trip's stats came from: the server, the device, or both."""
         if self.raw_ticks and self.edge_windows:
             return "server-mixed"
         if self.raw_ticks:

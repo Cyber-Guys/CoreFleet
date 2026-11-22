@@ -5,15 +5,15 @@ services:
       dockerfile: zenoh_router/subscriber/Dockerfile
     environment:
       ZENOH_CONFIG_FILE: /app/corefleet/config.json
-      # channel capacity: keep vehicles in CLOUD up to CLOUD_SATURATION of it,
-      # then offload the overflow (newest vehicles) to EDGE -> a hybrid mix
+      # channel capacity: vehicles stay in CLOUD up to CLOUD_SATURATION of it,
+      # the newest ones beyond that go to EDGE
       BW_LIMIT_BYTES_S: ${BW_LIMIT_BYTES_S:-3000}   # channel capacity (B/s)
       CLOUD_SATURATION: ${CLOUD_SATURATION:-0.8}    # % of capacity to fill with CLOUD
       STATS_INTERVAL_S: "5"
       LOG_LEVEL: INFO
       # ingest each finished trip into the Jakarta stats/registry service
       INGEST_URL: ${INGEST_URL:-http://fleet-report:8080/report/api/trips}
-      # push the live "who is driving now" + telemetry for the dashboard
+      # push who is driving now, with live telemetry, for the dashboard
       ACTIVE_URL: ${ACTIVE_URL:-http://fleet-report:8080/report/api/active}
       ACTIVE_INTERVAL_S: "2"     # live telemetry push cadence
       FINE_MIN_SPEEDING_S: "6"   # a multa needs this much speeding in a trip...
@@ -63,7 +63,7 @@ services:
       context: ./webapp
       dockerfile: Dockerfile
       args:
-        # browser uses the same-origin nginx proxy; no backend host baked in
+        # the browser goes through the nginx proxy on the same origin
         VITE_REPORT_API_URL: ${VITE_REPORT_API_URL:-/report-api}
     environment:
       ZENOH_CONFIG_FILE: /app/corefleet/config.json

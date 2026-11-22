@@ -1,12 +1,9 @@
-# CoreFleet Hourglass Report Service (Jakarta EE + LLM)
+# CoreFleet report service (Jakarta EE + LLM)
 
-Jakarta EE 11 (Open Liberty) service that completes **Challenge 3**. Built from the
-Eclipse o-cei [`hourglass-template`](https://gitlab.eclipse.org/eclipse-research-labs/o-cei-project/challenge-3-jakarta-ee-hourglass/hourglass-template),
-it uses **langchain4j** + OpenAI to:
+Jakarta EE 11 service on Open Liberty, written for Challenge 3. It started from the Eclipse o-cei [`hourglass-template`](https://gitlab.eclipse.org/eclipse-research-labs/o-cei-project/challenge-3-jakarta-ee-hourglass/hourglass-template) and uses langchain4j with OpenAI to:
 
-1. map a domain/use case onto the **Hourglass Model** (the template's endpoint), and
-2. accumulate CoreFleet **trips** into vehicle & driver registries and generate a
-   structured, **on-demand cached** report per **driver**.
+1. map a domain and use case onto the Hourglass Model (the template's endpoint);
+2. collect CoreFleet trips into vehicle and driver registries and write a report for each driver when asked, cached until the driver's data changes.
 
 ## Endpoints
 
@@ -14,51 +11,44 @@ Context root `/report`, JAX-RS application path `api`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET`  | `/report/api/status` | Health + configured model (no secrets). |
-| `POST` | `/report/api/trips` | Ingest a finished trip → update driver + vehicle stats. **No LLM.** |
-| `POST`/`GET` | `/report/api/active` | Live "who is driving now" (vid → current driver), pushed by the fleet server. |
-| `GET`  | `/report/api/vehicles` · `/vehicles/{vid}` | Vehicle registry (km, trips, fuel/oil, lights, recent drivers). |
-| `GET`  | `/report/api/drivers` · `/drivers/{did}` | Driver registry (anagrafica, trips, km, infractions, averages, recidivist). |
-| `POST` | `/report/api/drivers/{did}/report` | Generate **or return cached** the driver's LLM report. |
-| `GET`  | `/report/api/report` | History of generated reports (newest first). |
-| `POST` | `/report/api/hourglass/analyze` | `{domain, useCase}` → `{stakeholders, capabilities, standardsGroups}`. |
+| `GET` | `/report/api/status` | Health and configured model (no secrets). |
+| `POST` | `/report/api/trips` | Ingest a finished trip and update driver and vehicle stats. No LLM call. |
+| `POST`/`GET` | `/report/api/active` | Who is driving now (vid to current driver), pushed by the fleet server. |
+| `GET` | `/report/api/vehicles` · `/vehicles/{vid}` | Vehicle registry (km, trips, fuel and oil, lights, recent drivers). |
+| `GET` | `/report/api/drivers` · `/drivers/{did}` | Driver registry (anagrafica, trips, km, infractions, averages, repeat offences). |
+| `POST` | `/report/api/drivers/{did}/report` | Generate the driver's LLM report, or return the cached one. |
+| `GET` | `/report/api/report` | History of generated reports (newest first). |
+| `POST` | `/report/api/hourglass/analyze` | `{domain, useCase}` to `{stakeholders, capabilities, standardsGroups}`. |
 
-See `hourglass-model.http` for ready-to-run examples.
+`hourglass-model.http` has example requests for each endpoint.
 
-## How it's wired
+## How it works
 
-- Trips are **ingested** (no LLM) and accumulated in an in-memory registry
-  (`FleetStore`): per-driver stats + per-vehicle asset state.
-- Reports are generated **on demand, per driver**, and **cached**: the cache key is a
-  hash of `trips + km + infractions + average scores`. Unchanged data ⇒ the stored
-  report is returned with `cached: true` and **no LLM call**.
-- `ChatModelProducer` builds a langchain4j `ChatModel` (OpenAI) from MicroProfile
-  Config; the key comes from `openai.api-key` ← **`OPENAI_API_KEY`** env, never compiled in.
-- The platform owns the numbers (scores, counts, recidivist, grade); the model writes
-  only the narrative + the Hourglass mapping.
+- Trips are ingested without calling the LLM and kept in an in-memory registry (`FleetStore`) with stats per driver and the state of each vehicle.
+- A report is generated per driver when someone asks for it, then cached. The cache key is a hash of trips, km, infractions and average scores. If none of those changed, the stored report comes back with `cached: true` and no LLM call.
+- `ChatModelProducer` builds a langchain4j `ChatModel` (OpenAI) from MicroProfile Config. The key comes from `openai.api-key`, which maps to the `OPENAI_API_KEY` environment variable, and is never compiled in.
+- The platform computes the numbers (scores, counts, repeat offences, grade). The model writes the text and the Hourglass mapping.
 
 ## Configuration
 
 | Env var | Default | Notes |
 |---|---|---|
-| `OPENAI_API_KEY` | _(empty)_ | Required. A missing key returns HTTP 502 at call time. |
-| `OPENAI_MODEL_NAME` | `gpt-4o-mini` | Template uses `gpt-5.5`; set this if your key has access. |
-| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Override for a proxy/compatible API. |
+| `OPENAI_API_KEY` | (empty) | Required. Without it, calls to the model fail with HTTP 502. |
+| `OPENAI_MODEL_NAME` | `gpt-4o-mini` | The template uses `gpt-5.5`; set it if your key has access. |
+| `OPENAI_BASE_URL` | `https://api.openai.com/v1` | Change it to use a proxy or a compatible API. |
 
 ## Run
 
-### Docker (part of the full stack)
+### Docker (with the full stack)
 
-From the repo root, put `OPENAI_API_KEY` in a gitignored `.env` (see `.env.example`), then:
+From the repository root, put `OPENAI_API_KEY` in a `.env` file (git ignores it, see `.env.example`), then:
 
 ```bash
 docker compose up --build
 # service on http://localhost:9080/report/api/status
 ```
 
-The fleet server posts every finished trip here automatically (`INGEST_URL`) and
-pushes the live "who's driving now" map (`ACTIVE_URL`). Reports are generated on
-demand from the **Drivers** tab.
+The fleet server posts every finished trip here (`INGEST_URL`) and pushes who is driving now (`ACTIVE_URL`). Reports are generated from the Drivers tab of the dashboard.
 
 ### Local (Maven + Open Liberty)
 
@@ -68,10 +58,8 @@ mvn package          # builds target/corefleet-report.war
 mvn liberty:run      # serves on http://localhost:8080/report/api/status
 ```
 
-> Note: the template targets Java 26 / Open Liberty 26; this module is pinned to
-> **Java 17** — the Jakarta EE 11 minimum and the newest Java with an official
-> Open Liberty image (`open-liberty:full-java17-openj9`).
+The template targets Java 26 and Open Liberty 26. This module uses Java 17: it is the minimum for Jakarta EE 11 and the newest Java with an official Open Liberty image (`open-liberty:full-java17-openj9`).
 
-## Notes
+## Limits
 
-- This service holds reports in memory (last 50). Persisting them is a later step.
+Reports are kept in memory (the last 50) and are lost on restart.

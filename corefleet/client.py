@@ -6,11 +6,11 @@ Wraps a Zenoh session and exposes the few operations a vehicle agent needs:
     * declare presence with a liveliness token (``core/fleet/{vid}/alive``);
     * stream CLOUD telemetry (``raw``) or EDGE aggregates (``summary``);
     * publish the final session aggregate on shutdown (``session``);
-    * follow the server-dictated transmission mode, including an initial query
-      so a vehicle that joins mid-run learns the current mode immediately.
+    * follow the transmission mode set by the server, with a query at startup
+      so a vehicle that joins mid-run gets its mode right away.
 
-The class is thread-safe for reading :attr:`mode`; the mode subscriber runs on
-a Zenoh background thread and updates it under a lock.
+Reading :attr:`mode` is thread-safe: the mode subscriber runs on a Zenoh
+background thread and updates it under a lock.
 """
 from __future__ import annotations
 

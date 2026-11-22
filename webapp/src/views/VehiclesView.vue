@@ -1,6 +1,6 @@
 <script setup>
-/* Vehicles registry — list + detail (odometer, trips, fuel/oil, warning lights,
-   recent drivers). Data from the Jakarta fleet store. */
+/* Vehicle registry: list and detail (odometer, trips, fuel and oil, warning
+lights, recent drivers), from the Jakarta fleet store. */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'

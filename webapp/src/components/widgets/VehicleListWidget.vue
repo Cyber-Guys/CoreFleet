@@ -1,6 +1,6 @@
 <script setup>
-/* Connected vehicles — live "who is driving now" from the Jakarta service.
-   Row → that vehicle's stats; driver name → that driver's stats. */
+/* Connected vehicles: who is driving now, from the Jakarta service.
+Clicking a row opens the vehicle's stats, clicking the driver name opens the driver's. */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import BaseWidget from '@/components/ui/BaseWidget.vue'

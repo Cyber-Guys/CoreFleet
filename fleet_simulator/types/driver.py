@@ -1,10 +1,10 @@
 """
 Conducente (driver).
 
-A driver is the *person* who is scored. Over a simulation a driver takes a car
-from the fleet for a finite trip, then may take another car (or the same one)
-for a later trip — so behaviour can be tracked across trips. The driving style
-lives here, on the person, not the car.
+A driver is the person who gets scored. During a simulation a driver takes a
+car for a trip and may later take another car (or the same one), so their
+behaviour can be followed across trips. The driving style belongs to the
+driver, not to the car.
 """
 from dataclasses import dataclass
 

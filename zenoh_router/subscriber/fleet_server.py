@@ -1,23 +1,23 @@
 """
-CoreFleet server: subscriber + congestion controller + session finalizer.
+CoreFleet server: subscriber, congestion controller and trip finalizer.
 
-Responsibilities
-----------------
-* Track presence via liveliness tokens (``core/fleet/*/alive``).
-* Ingest telemetry: ``raw`` (CLOUD, 1 Hz) and ``summary`` (EDGE windows).
-* Derive each trip's driving features *server-side* from the CLOUD raw stream
-  (:class:`~corefleet.aggregate.ServerTripAggregator`); EDGE windows are folded
-  in so the aggregate stays complete across mode switches. The cloud does the
-  work in CLOUD, the device does it in EDGE — same numbers, different location.
-* Assign a per-vehicle transmission mode so the fleet runs a hybrid mix: keep
-  vehicles in CLOUD up to ``CLOUD_SATURATION`` of the channel, offload the
-  overflow (newest first) to EDGE. Published on ``core/fleet/{vid}/mode`` and
-  answered via a queryable so a late-joining vehicle reads its mode on boot.
-* Finalize a driving session when its full-session aggregate arrives on
-  ``core/fleet/*/session`` and emit the report payload (LLM/Jakarta hand-off),
-  scoring the server-owned aggregate rather than trusting the client's numbers.
-* Report bandwidth and estimated transmission energy saved vs an all-CLOUD
-  baseline -- the headline Challenge 1 metric.
+What it does:
+
+* Tracks presence with liveliness tokens (``core/fleet/*/alive``).
+* Receives telemetry: ``raw`` (CLOUD, 1 Hz) and ``summary`` (EDGE windows).
+* Computes each trip's driving features on the server from the CLOUD raw
+  stream (:class:`~corefleet.aggregate.ServerTripAggregator`). EDGE windows
+  are added in, so the aggregate stays complete when a vehicle changes mode.
+  In CLOUD the server does the work, in EDGE the device does.
+* Gives each vehicle a transmission mode: vehicles stay in CLOUD up to
+  ``CLOUD_SATURATION`` of the channel and the newest ones go to EDGE. The
+  mode is published on ``core/fleet/{vid}/mode`` and also answered as a
+  query, so a vehicle that joins late reads its mode at startup.
+* Closes a trip when its whole-trip aggregate arrives on
+  ``core/fleet/*/session`` and sends it to the Jakarta service. The score is
+  computed from the server's own aggregate, not from the client's numbers.
+* Logs bandwidth and the transmission energy saved compared with a fleet
+  that is all CLOUD (the main Challenge 1 metric).
 """
 from __future__ import annotations
 
@@ -53,9 +53,9 @@ def _full_name(data: dict) -> str:
 
 
 def _bad_behaviours(summary: dict) -> list[str]:
-    """Names of the unsafe/wasteful behaviours present in a trip aggregate.
-    Note: 'speeding' (a fine) is added separately — not every moment over the
-    limit becomes a multa."""
+    """Names of the unsafe or wasteful behaviours found in a trip aggregate.
+    'speeding' (a fine) is added separately, because not every second over
+    the limit becomes a multa."""
     flags = []
     if summary.get("harsh_accel", 0) > 0:
         flags.append("harsh_accel")
@@ -80,8 +80,7 @@ class FleetServer:
         self.cloud_saturation = _env_float("CLOUD_SATURATION", 0.8)
         self.joules_per_mb = _env_float("JOULES_PER_MB", 1100.0)
         self.stats_interval_s = _env_float("STATS_INTERVAL_S", 5.0)
-        # a fine (multa) needs sustained speeding AND being caught — not every
-        # second over the limit is a fine
+        # a fine (multa) needs sustained speeding and getting caught
         self.fine_min_speeding_s = _env_float("FINE_MIN_SPEEDING_S", 6.0)
         self.fine_catch_rate = _env_float("FINE_CATCH_RATE", 0.3)
         # Jakarta stats/registry service. Empty -> ingest disabled (log only).
@@ -98,8 +97,8 @@ class FleetServer:
         self._vmode: dict[str, P.Mode] = {}   # vid -> assigned transmission mode
         self._join_seq: dict[str, int] = {}   # vid -> join order (CLOUD priority)
         self._seq = 0
-        # per-vehicle server-side trip aggregator (derives features from raw in
-        # CLOUD; folds EDGE window summaries) -> authoritative trip stats
+        # one trip aggregator per vehicle: computes features from raw data in
+        # CLOUD and adds up EDGE window summaries. Trip stats come from here.
         self._trip_agg: dict[str, ServerTripAggregator] = {}
 
         # rolling traffic counters (since last stats tick)
@@ -221,9 +220,9 @@ class FleetServer:
 
     # --- session report (LLM / Jakarta hand-off) ---
     def _finalize_session(self, summary: dict) -> None:
-        # Prefer the server's own aggregate (features derived from raw in CLOUD,
-        # folded from windows in EDGE) over the client's numbers. Fall back to the
-        # client session only if the server saw no telemetry for this trip.
+        # Use the server's own aggregate instead of the client's numbers. Fall
+        # back to the client session only if the server saw no telemetry for
+        # this trip.
         vid = summary.get("vid")
         with self._lock:
             agg = self._trip_agg.pop(vid, None)
@@ -263,7 +262,7 @@ class FleetServer:
         log.info("TRIP %s driver=%s vid=%s safety=%s eco=%s stats=%s",
                  trip["tripId"], did, summary.get("vid"), scores["safety"], scores["eco"],
                  summary.get("stats_by"))
-        # Ingest into the Jakarta service (best-effort, off the Zenoh thread).
+        # Send to the Jakarta service on a separate thread. Failures are only logged.
         if self.ingest_url:
             threading.Thread(target=self._post_ingest, args=(trip,), daemon=True).start()
 
@@ -282,7 +281,7 @@ class FleetServer:
 
     @staticmethod
     def _score(s: dict) -> dict:
-        """Deterministic eco/safety scores; the LLM only narrates these."""
+        """Eco and safety scores. The LLM writes text around them but never changes them."""
         dur_min = max(s.get("dur_min", 0.0), 1e-6)
         events_per_min = (s.get("harsh_accel", 0) + s.get("harsh_brake", 0)) / dur_min
         safety = max(0.0, 100.0 - 12.0 * events_per_min - 0.5 * s.get("speeding_s", 0))
@@ -292,9 +291,9 @@ class FleetServer:
 
     # --- congestion control + stats ---
     def _control_tick(self) -> None:
-        """Keep as many vehicles in CLOUD as the channel allows (up to
-        cloud_saturation of the limit); offload the overflow to EDGE. Older
-        vehicles keep CLOUD priority, so new ones spill to EDGE when saturated."""
+        """Keep as many vehicles in CLOUD as fit in cloud_saturation of the
+        channel and move the rest to EDGE. Older vehicles keep priority, so
+        the newest ones go to EDGE first."""
         changes = []
         with self._lock:
             avg = max(self._avg_raw_bytes, 1.0)
@@ -356,8 +355,8 @@ class FleetServer:
             log.debug("active push failed (%s): %s", self.active_url, exc)
 
     def _active_loop(self) -> None:
-        """Evaluate the mode and push live telemetry frequently, independent of
-        the (slower) stats cadence, so CLOUD<->EDGE switches promptly."""
+        """Recompute modes and push live telemetry on a faster loop than the
+        stats one, so mode changes happen quickly."""
         while not self._stop.is_set():
             self._control_tick()
             self._post_active()

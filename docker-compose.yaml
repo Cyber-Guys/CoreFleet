@@ -1,16 +1,16 @@
 # CoreFleet full stack: Zenoh router + fleet server + simulator + report + webapp.
 #   docker compose up --build
 #
-# SINGLE HOST (default): every cross-service URL below defaults to a compose
-# service name, so it works out of the box.
+# Single host (default): every URL between services below defaults to a
+# compose service name, so nothing needs to be set.
 #
-# DISTRIBUTED (split across PCs): copy this file to each machine, put the values
+# Several PCs: copy this file to each machine, put the values
 # in a .env (see .env.example), and run only the services that live there, e.g.
 #   Laptop B (router):    docker compose up zenoh-router
 #   Laptop A (simulator): ZENOH_ROUTER=tcp/<B-IP>:7447 docker compose up fleet-simulator
 #   Laptop C (backend+ui): ZENOH_ROUTER=tcp/<B-IP>:7447 ZENOH_REST_URL=http://<B-IP>:8000 \
 #                          docker compose up fleet-server fleet-report fleet-webapp
-# No host/IP is hardcoded in source — everything is an env var below.
+# Hosts and IPs are never hardcoded in the source, they all come from the env vars below.
 services:
   zenoh-router:
     image: eclipse/zenoh:latest
@@ -27,15 +27,15 @@ services:
       dockerfile: zenoh_router/subscriber/Dockerfile
     environment:
       ZENOH_ROUTER: ${ZENOH_ROUTER:-tcp/zenoh-router:7447}
-      # channel capacity: keep vehicles in CLOUD up to CLOUD_SATURATION of it,
-      # then offload the overflow (newest vehicles) to EDGE -> a hybrid mix
+      # channel capacity: vehicles stay in CLOUD up to CLOUD_SATURATION of it,
+      # the newest ones beyond that go to EDGE
       BW_LIMIT_BYTES_S: ${BW_LIMIT_BYTES_S:-3000}   # channel capacity (B/s)
       CLOUD_SATURATION: ${CLOUD_SATURATION:-0.8}    # % of capacity to fill with CLOUD
       STATS_INTERVAL_S: "5"
       LOG_LEVEL: INFO
       # ingest each finished trip into the Jakarta stats/registry service
       INGEST_URL: ${INGEST_URL:-http://fleet-report:8080/report/api/trips}
-      # push the live "who is driving now" + telemetry for the dashboard
+      # push who is driving now, with live telemetry, for the dashboard
       ACTIVE_URL: ${ACTIVE_URL:-http://fleet-report:8080/report/api/active}
       ACTIVE_INTERVAL_S: "2"     # live telemetry push cadence
       FINE_MIN_SPEEDING_S: "6"   # a multa needs this much speeding in a trip...
@@ -87,7 +87,7 @@ services:
       context: ./webapp
       dockerfile: Dockerfile
       args:
-        # browser uses the same-origin nginx proxy; no backend host baked in
+        # the browser goes through the nginx proxy on the same origin
         VITE_REPORT_API_URL: ${VITE_REPORT_API_URL:-/report-api}
     environment:
       # nginx reverse-proxy upstreams (override with IPs for a split deployment)

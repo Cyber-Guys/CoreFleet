@@ -1,8 +1,8 @@
 # --- build stage ---
 FROM node:20-alpine AS build
 
-# The browser talks to the webapp's OWN origin; nginx proxies onward. Default to
-# the same-origin proxy path so no backend host/IP is baked into the bundle.
+# The browser only talks to the webapp's origin and nginx forwards the calls.
+# The default is the proxy path, so the bundle contains no backend host or IP.
 ARG VITE_REPORT_API_URL=/report-api
 ENV VITE_REPORT_API_URL=$VITE_REPORT_API_URL
 

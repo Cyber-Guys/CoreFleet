@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet, based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.fleet;
 
@@ -45,10 +45,10 @@ public class FleetStore {
 
     private final ConcurrentMap<String, DriverEntity> drivers = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, VehicleEntity> vehicles = new ConcurrentHashMap<>();
-    // live "who is driving now" + telemetry, pushed by the server (passthrough)
+    // who is driving now, with telemetry, as pushed by the server
     private volatile JsonArray active = JsonValue.EMPTY_JSON_ARRAY;
 
-    // async hourglass image generation (decoupled from the text report)
+    // hourglass images, generated separately from the text report
     private final ExecutorService imageExecutor = Executors.newFixedThreadPool(2);
     private final ConcurrentMap<String, String> driverImage = new ConcurrentHashMap<>(); // did -> data URI
     private final Set<String> imageInFlight = ConcurrentHashMap.newKeySet();
@@ -122,11 +122,11 @@ public class FleetStore {
             return cached;
         }
 
-        // 1) compute the authoritative, already-final numbers first
+        // 1) compute the final numbers first
         DriverReport r = new DriverReport();
         applyAuthoritative(r, d);
 
-        // 2) the LLM only writes the narrative — from those exact numbers
+        // 2) the LLM writes the text from those numbers
         DriverReport narrative = ai.analyze(driverInputJson(d, r));
         r.setSummary(narrative.getSummary());
         r.setStrengths(narrative.getStrengths());
@@ -136,8 +136,8 @@ public class FleetStore {
             r.setHourglass(narrative.getHourglass());
         }
 
-        // 3) the hourglass visual is generated ASYNCHRONOUSLY so the text report
-        //    returns immediately (no 502 from a slow sequential image call)
+        // 3) the hourglass image is generated in the background, so the text
+        //    report returns right away instead of timing out with a 502
         String existingImg = driverImage.get(did);
         if (existingImg != null) {
             r.setHourglassImageUrl(existingImg);
@@ -235,9 +235,8 @@ public class FleetStore {
         return String.join(", ", list.subList(0, Math.min(4, list.size())));
     }
 
-    /** Input for the LLM: the AUTHORITATIVE numbers already on the report (so the
-     *  narrative cites exactly what the dashboard shows), plus the per-trip
-     *  trajectory for context. */
+    /** Input for the LLM: the numbers already on the report, so the text quotes
+     *  what the dashboard shows, plus the per-trip history for context. */
     private static String driverInputJson(DriverEntity d, DriverReport r) {
         JsonObjectBuilder b = Json.createObjectBuilder()
                 .add("did", r.getDid())

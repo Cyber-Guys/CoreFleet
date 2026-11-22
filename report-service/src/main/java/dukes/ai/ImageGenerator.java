@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet, based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.ai;
 
@@ -21,13 +21,13 @@ import jakarta.json.JsonValue;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * Generates an image via the OpenAI <b>Responses API</b> image_generation tool
- * (POST /v1/responses with tools:[{type:"image_generation"}]), matching the
- * working reference script. This is the path this key supports — the standard
- * /images/generations endpoint (used by langchain4j) is not available here.
+ * Generates an image with the image_generation tool of the OpenAI Responses API
+ * (POST /v1/responses with tools:[{type:"image_generation"}]), like the
+ * reference script. The key we use cannot call /images/generations, the
+ * endpoint langchain4j uses, so this goes through /v1/responses.
  *
- * Returns a data: URI (base64 PNG) or null (best-effort — a report is still valid
- * without the visual).
+ * Returns a data: URI (base64 PNG), or null on failure. A report without an
+ * image is still valid.
  */
 @ApplicationScoped
 public class ImageGenerator {
@@ -67,8 +67,8 @@ public class ImageGenerator {
         return enabled && apiKey != null && !apiKey.isBlank();
     }
 
-    // force HTTP/1.1: the default HTTP/2 client hangs against OpenAI's edge on
-    // this runtime (OpenJ9), while HTTP/1.1 matches the working reference call
+    // force HTTP/1.1: on OpenJ9 the default HTTP/2 client hangs when talking
+    // to OpenAI, HTTP/1.1 works
     private final HttpClient http = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(15))
@@ -87,12 +87,12 @@ public class ImageGenerator {
                                 .add("type", "image_generation")
                                 .add("size", imageSize)
                                 .add("quality", imageQuality)))
-                // force the model to actually call the image tool every time
+                // make the model call the image tool every time
                 .add("tool_choice", Json.createObjectBuilder().add("type", "image_generation"))
                 .build().toString();
 
-        // image_generation is slow (~60-90s) and OpenAI's edge occasionally returns
-        // a transient 5xx — retry those.
+        // image_generation is slow (~60-90s) and OpenAI sometimes returns a
+        // temporary 5xx, so retry those.
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
                 HttpRequest req = HttpRequest.newBuilder()

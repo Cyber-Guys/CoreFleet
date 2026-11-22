@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet, based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.ai;
 
@@ -42,8 +42,8 @@ public class ChatModelProducer {
     @ApplicationScoped
     public ChatModel chatModel() {
         return OpenAiChatModel.builder()
-                // a non-blank placeholder keeps the builder happy; a real call
-                // with a missing key fails with a clear 401 at request time
+                // the builder rejects a blank key, so use a placeholder; without a
+                // real key the request fails with a 401
                 .apiKey(apiKey == null || apiKey.isBlank() ? "missing-OPENAI_API_KEY" : apiKey)
                 .baseUrl(baseUrl)
                 .modelName(modelName)

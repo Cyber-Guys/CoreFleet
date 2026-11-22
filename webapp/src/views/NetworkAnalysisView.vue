@@ -1,8 +1,8 @@
 <script setup>
-/* Network Analysis — CLOUD vs EDGE traffic and energy.
-   Estimates bandwidth/energy for the current fleet in each mode and highlights
-   the saving EDGE delivers. Payload sizes match the protocol; the fleet size and
-   mode split come live from the store. */
+/* Network analysis: CLOUD and EDGE traffic and energy.
+Estimates bandwidth and energy for the current fleet in each mode and shows how
+much EDGE saves. Payload sizes match the protocol; fleet size and mode split
+come from the store. */
 import { computed } from 'vue'
 import BaseWidget from '@/components/ui/BaseWidget.vue'
 import { useFleet } from '@/composables/useFleet'

@@ -1,8 +1,8 @@
 """
 CoreFleet Zenoh protocol.
 
-Single source of truth for key expressions, transmission modes and the payload
-codec shared by vehicles and the server. `vid` is the vehicle id (licence plate).
+Key expressions, transmission modes and the payload codec, shared by the
+vehicles and the server. `vid` is the vehicle id (licence plate).
 
 Key space (all under ``core/fleet``):
 
@@ -48,8 +48,8 @@ def session_key(vid: str) -> str:
 
 
 def mode_key(vid: str) -> str:
-    """Per-vehicle mode key: the server assigns each vehicle CLOUD or EDGE so the
-    fleet runs a hybrid mix (CLOUD until the channel saturates, overflow -> EDGE)."""
+    """Mode key of one vehicle. The server sets CLOUD or EDGE for each vehicle:
+    CLOUD while the channel has room, EDGE for the rest."""
     return f"{KEY_ROOT}/{vid}/mode"
 
 

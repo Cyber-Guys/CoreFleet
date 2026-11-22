@@ -1,4 +1,4 @@
-# NOTE: `from .types import DriverProfile` lives at the BOTTOM of this module.
+# `from .types import DriverProfile` is at the bottom of this module.
 # The `types` submodules import the constants below, so the constants must be
 # defined before `types` is imported, otherwise the import cycle breaks.
 

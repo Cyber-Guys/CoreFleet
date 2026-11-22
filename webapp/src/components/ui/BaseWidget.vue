@@ -1,6 +1,6 @@
 <script setup>
-/* Reusable HUD panel. The accent colour drives the border, glow and header chip
-   so every widget shares one structural language. */
+/* HUD panel used by every widget. The accent colour sets the border, the glow
+and the header chip. */
 import AppIcon from './AppIcon.vue'
 
 defineProps({

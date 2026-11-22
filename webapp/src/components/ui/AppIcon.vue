@@ -1,5 +1,5 @@
 <script setup>
-/* Inline SVG icon set — no icon dependency, renders crisp at any size. */
+/* Inline SVG icons, so the app needs no icon library. */
 import { computed } from 'vue'
 
 const props = defineProps({

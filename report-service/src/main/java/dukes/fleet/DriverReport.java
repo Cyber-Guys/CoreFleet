@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet, based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.fleet;
 
@@ -8,9 +8,9 @@ import java.util.List;
 import dukes.hourglass.HourglassOutput;
 
 /**
- * LLM-generated report about a DRIVER, aggregating all of their trips. The
- * numeric/identity fields are authoritative (set by the platform); the LLM
- * supplies the narrative and the hourglass mapping.
+ * Report about a driver, covering all of their trips. The platform sets the
+ * numbers and the identity fields; the LLM writes the text and the hourglass
+ * mapping.
  */
 public class DriverReport {
     private String did;

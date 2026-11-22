@@ -1,6 +1,6 @@
 /* =========================================================================
-   CoreFleet SDV — design tokens & base
-   Cyber/Tech control-room aesthetic. Deep navy, neon accents, HUD typography.
+   CoreFleet SDV: design tokens and base styles
+   Control-room look: dark navy, neon accents, HUD-style type.
    ========================================================================= */
 :root {
   /* surfaces */
@@ -62,7 +62,7 @@ body {
   font-family: var(--font-body);
   color: var(--text);
   background-color: var(--bg);
-  /* layered atmosphere: two neon pools + a faint engineering grid */
+  /* background: two neon glows and a faint grid */
   background-image:
     radial-gradient(1100px 620px at 82% -8%, rgba(139, 92, 255, 0.16), transparent 60%),
     radial-gradient(900px 560px at 6% 108%, rgba(34, 211, 255, 0.12), transparent 58%),
@@ -73,7 +73,7 @@ body {
 }
 
 #app::before {
-  /* subtle dot-grid texture, fixed behind everything */
+  /* dot grid, fixed behind everything */
   content: '';
   position: fixed;
   inset: 0;
@@ -117,9 +117,9 @@ button {
   background: transparent;
 }
 
-/* --- shared, reusable motifs --- */
+/* --- shared styles --- */
 
-/* the green "alive" pulse — mirrors a Zenoh liveliness token */
+/* green "alive" pulse, shown while the Zenoh liveliness token is held */
 @keyframes cf-pulse {
   0% {
     box-shadow: 0 0 0 0 rgba(43, 255, 158, 0.55), 0 0 10px rgba(43, 255, 158, 0.7);
@@ -132,7 +132,7 @@ button {
   }
 }
 
-/* horizontal telemetry sweep used as the dashboard signature */
+/* horizontal telemetry sweep on the dashboard */
 @keyframes cf-sweep {
   0% {
     transform: translateX(-120%);

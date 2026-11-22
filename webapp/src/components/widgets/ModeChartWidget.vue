@@ -59,8 +59,8 @@ onMounted(() => {
 
 watch([cloudCount, edgeCount], () => {
   if (!chart) return
-  // mutate the existing dataset in place so Chart.js tweens from the current
-  // arc values instead of re-animating from zero
+  // update the dataset in place so Chart.js animates from the current values
+  // instead of starting again from zero
   chart.data.datasets[0].data = [cloudCount.value, edgeCount.value]
   chart.update()
 })
@@ -111,7 +111,7 @@ onBeforeUnmount(() => chart?.destroy())
   display: grid;
   place-items: center;
 }
-/* luminescent glow on the doughnut arcs (no hard border) */
+/* glow on the doughnut arcs instead of a border */
 .chart__canvas canvas {
   filter: drop-shadow(0 0 9px rgba(255, 122, 26, 0.4)) drop-shadow(0 0 9px rgba(139, 92, 255, 0.35));
 }

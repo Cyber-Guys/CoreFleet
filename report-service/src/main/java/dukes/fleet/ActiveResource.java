@@ -1,5 +1,5 @@
 /********************************************************************************
- * CoreFleet — based on the Eclipse o-cei hourglass-template (EPL-2.0).
+ * CoreFleet, based on the Eclipse o-cei hourglass-template (EPL-2.0).
  ********************************************************************************/
 package dukes.fleet;
 
@@ -16,9 +16,9 @@ import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
 /**
- * Live "who is driving now" + per-vehicle telemetry. The fleet server pushes it
- * every couple of seconds from the telemetry stream; the dashboard reads it for
- * the connected-vehicles list and the live-trip panel. Stored/served verbatim.
+ * Who is driving now, with live telemetry per vehicle. The fleet server pushes
+ * it every couple of seconds and the dashboard reads it for the list of
+ * connected vehicles and the live trip panel. Stored and returned as received.
  */
 @Path("/active")
 public class ActiveResource {

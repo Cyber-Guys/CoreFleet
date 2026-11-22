@@ -1,9 +1,9 @@
 /**
- * useFleet — singleton fleet store (module-scoped reactive state).
+ * useFleet: shared fleet store (reactive state at module level).
  *
- * Live data only: polls the Jakarta service for the connected vehicles
- * (`/report/api/active`, with per-vehicle mode + telemetry) and the full vehicle
- * registry (`/report/api/vehicles`). No mock data.
+ * Polls the Jakarta service for the connected vehicles (`/report/api/active`,
+ * with mode and telemetry per vehicle) and the vehicle registry
+ * (`/report/api/vehicles`). There is no mock data.
  */
 import { computed, reactive, readonly, ref } from 'vue'
 import { fleetApi } from '@/services/fleetApi'
@@ -21,8 +21,8 @@ let pollTimer = null
 
 // --- derived views ---
 const activeCount = computed(() => state.active.length)
-// true fleet size = cars seen in the registry ∪ cars currently on a trip
-// (a car only enters the registry after its first trip ends)
+// fleet size = cars in the registry plus cars on a trip, without duplicates
+// (a car enters the registry only after its first trip ends)
 const totalFleet = computed(() => {
   const ids = new Set(state.vehicles.map((v) => v.vid))
   for (const a of state.active) ids.add(a.vid)

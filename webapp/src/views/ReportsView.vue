@@ -1,6 +1,6 @@
 <script setup>
-/* Reports history — the driver reports generated on demand (from the Drivers
-   tab). Polls the Jakarta history endpoint. */
+/* Report history: the driver reports generated from the Drivers tab. Polls the
+Jakarta history endpoint. */
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import BaseWidget from '@/components/ui/BaseWidget.vue'
 import DriverReportCard from '@/components/DriverReportCard.vue'

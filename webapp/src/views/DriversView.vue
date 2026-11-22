@@ -1,6 +1,6 @@
 <script setup>
-/* Drivers registry — list + detail (anagrafica, trips, km, infractions) and an
-   on-demand "Genera report" button (cached when the driver's data is unchanged). */
+/* Driver registry: list and detail (anagrafica, trips, km, infractions), with a
+"Genera report" button. The report is cached until the driver's data changes. */
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import AppIcon from '@/components/ui/AppIcon.vue'
@@ -104,7 +104,7 @@ async function generate() {
   }
 }
 
-// poll the async hourglass image until it's ready
+// poll the hourglass image until it is ready
 function pollImage(did) {
   stopImagePoll()
   imageTimer = setInterval(async () => {

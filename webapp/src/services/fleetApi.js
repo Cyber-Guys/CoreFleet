@@ -1,9 +1,9 @@
 /**
  * Fleet API client.
  *
- * Calls the same-origin `/report-api` path by default (nginx proxies it to the
- * report service in prod; the Vite dev server proxies it in dev). Override the
- * base with VITE_REPORT_API_URL at build time. No host/IP is hardcoded here.
+ * Calls `/report-api` on the same origin by default. In production nginx
+ * proxies it to the report service, in development the Vite dev server does.
+ * Set VITE_REPORT_API_URL at build time to use another base URL.
  */
 const REPORT_BASE = import.meta.env.VITE_REPORT_API_URL || '/report-api'
 
@@ -13,7 +13,7 @@ export const fleetApi = {
     return getJson(`${REPORT_BASE}/report/api/report`, signal)
   },
 
-  /** Live "who is driving now" + telemetry (mode, speed, rpm, …) per vehicle. */
+  /** Who is driving now, with telemetry per vehicle (mode, speed, rpm, ...). */
   async getActive({ signal } = {}) {
     return getJson(`${REPORT_BASE}/report/api/active`, signal)
   },
@@ -34,8 +34,8 @@ export const fleetApi = {
     return getJson(`${REPORT_BASE}/report/api/drivers/${encodeURIComponent(did)}`, signal)
   },
 
-  /** Generate (or return cached) LLM report for a driver. Returns fast; the
-   *  hourglass image is generated asynchronously (poll getDriverReportImage). */
+  /** Generate a driver's LLM report, or return the cached one. Returns quickly;
+   *  the hourglass image is generated in the background (poll getDriverReportImage). */
   async generateDriverReport(did) {
     const res = await fetch(`${REPORT_BASE}/report/api/drivers/${encodeURIComponent(did)}/report`, {
       method: 'POST',
@@ -45,7 +45,7 @@ export const fleetApi = {
     return res.json() // DriverReport
   },
 
-  /** Poll the async hourglass image: { status: 'ready'|'pending'|'none', imageUrl }. */
+  /** Poll the hourglass image: { status: 'ready'|'pending'|'none', imageUrl }. */
   async getDriverReportImage(did, { signal } = {}) {
     return getJson(`${REPORT_BASE}/report/api/drivers/${encodeURIComponent(did)}/report/image`, signal)
   },
